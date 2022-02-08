@@ -36,7 +36,7 @@ uint8_t state = BOOT;                                   // current machine state
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t posIndex = 0;                                   // stores current index used for wave array
 uint8_t timeStepGlobal = 0;                             // time between steps on wave
-unsigned long times[2] = {0.0, 0.0};                    // used for measuring whether a cycle has elapsed
+unsigned long times[2] = {0, 0};                        // used for measuring whether a cycle has elapsed
 unsigned long timeStart;                                // records the time at which the test starts
 //float cmds[5] = {0.0f, 0.0f, 30.0f, 0.5f, 0.0f};      // parameters sent to motors {P, V, KP, KD, To};
 //volatile float zeroFactors[3] = {0.0f, 0.0f, 0.0f};   // used to adjust the zero point of commands sent to motor

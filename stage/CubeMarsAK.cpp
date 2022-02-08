@@ -7,6 +7,7 @@ mcp2515_can CAN1(SPI_CS_PIN);
 
 
 enum {P, V, KP, KD, To};
+const float INITS[CMDS_LENGTH] = {0.0f, 0.0f, 30.0f, 0.5f, 0.0f};
 const float MINS[CMDS_LENGTH] = {-12.5f, -50.00f, 0.0f, 0.0f, -25.0f};
 const float MAXES[CMDS_LENGTH] = {12.5f, 50.00f, 500.0f, 5.0f, 25.0f};
 const float BITS[CMDS_LENGTH] = {16, 12, 12, 12, 12};
@@ -26,14 +27,18 @@ void CubeMarsAK::boot() {
   if(_powered) {mode = MODES[ENTER];}
   else {mode = MODES[EXIT];}
   _setMotorMode(mode);
-  delay(2500);
   _setZero();
+  for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = INITS[i];}
+  delay(2500);
 }
 
 void CubeMarsAK::setPos(float p) {
-  _cmds[P] = p + _zero;
-  _packCmds();
-  _unpackReply();
+  if(_powered)
+  {
+    _cmds[P] = p + _zero;
+    _packCmds();
+    _unpackReply();
+  }
 }
 
 void CubeMarsAK::setID(uint8_t id) {
@@ -53,6 +58,10 @@ void CubeMarsAK::_setZero() {
     _zero = _uint_to_float(p_int, MINS[P], MAXES[P], BITS[P]);
   }
   else {_zero = 0.0;}
+  
+  #ifdef DEBUG
+    Serial.println("Motor id " + String(_id) + " Zero Position: " + String(_zero));
+  #endif
 }
 
 void CubeMarsAK::_packCmds() {
@@ -88,7 +97,6 @@ void CubeMarsAK::_unpackReply() {
     CAN1.readMsgBuf(&len,_buf);
 
     /// unpack ints from can buffer ///
-    unsigned int id = _buf[0];
     unsigned int p_int = (_buf[1] << 8) | _buf[2];          // 16 bit position, between -4*pi and 4*pi
     unsigned int v_int = (_buf[3] << 4) | (_buf[4] >> 4);   // 12 bit velocity, between -30 and + 30 rad/s
     unsigned int t_int = ((_buf[4] & 0xF) << 8) | _buf[5];
@@ -101,13 +109,13 @@ void CubeMarsAK::_unpackReply() {
 #ifdef DEBUG
     Serial.print(" |Upck| p: (" + String(p_int) + ", " + String(p));
     Serial.print("), v: (" + String(v_int) + ", " + String(v));
-    Serial.print("), t: (" + String(t_int) + ", " + String(t) + ")");
+    Serial.println("), t: (" + String(t_int) + ", " + String(t) + ")");
 #endif
   }
   else 
   {
     #ifdef DEBUG
-      Serial.print(" No CAN message received...");
+      Serial.println(" No CAN message received...");
     #endif
   }
 }
@@ -118,7 +126,7 @@ void CubeMarsAK::_setMotorMode(byte mode){
  CAN1.sendMsgBuf(_id, 0, BUF_LENGTH, _buf);
  
  #ifdef DEBUG
- Serial.println("Motor Mode Initiated: Motor _id " + String(_id));
+ Serial.println("Motor id " + String(_id) + " Mode: " + String(mode));
  #endif
  delay(100);
 }

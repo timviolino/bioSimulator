@@ -2,7 +2,7 @@
 #define CUBE_MARS_AK_h_
 
 #include <Arduino.h>
-#include <mcp2515_can.h>                  // Used for packing CAN messages
+#include <mcp2515_can.h>
 
 #define BUF_LENGTH 8
 #define CMDS_LENGTH 5
@@ -16,7 +16,7 @@ class CubeMarsAK
     bool _powered;
     float _zero;
     byte _buf[BUF_LENGTH];
-    float _cmds[CMDS_LENGTH];    // {P, V, KP, KD, To};
+    float _cmds[CMDS_LENGTH];
 
     // Functions
     void _setZero();
