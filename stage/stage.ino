@@ -1,55 +1,59 @@
 #define DEBUG
 
-////////////////////////////// Test Parameter Definitions //////////////////////////////
+////////////////////////////// Libraries //////////////////////////////
+#include <SPI.h>                          // Used for packing CAN messages
+#include <mcp2515_can.h>                  // Used for packing CAN messages
+#include "CubeMarsAK.h"                   // Cube Mars AK Series motor control class 
+#include "waveforms.h"                    // array of hardcoded sine wave positions
+#include <math.h>
+#include <Wire.h>                         // Used for networking between Arduinos
+//#include "motorMode.h"                  // Custom, used to organize motor communications
+//#include "motorPackets.h"               // Custom, used for organize motor communications
+
+////////////////////////////// Global Constant Defintions //////////////////////////////
+#define CAN_INT_PIN 3
+#define SPI_CS_PIN 9
+
+#define NUM_MOTORS 3                          // number of motors 
+const unsigned long BAUD_RATE = 115200;       // rate of communications over serial bus 
+enum {USER_INPUT, BOOT, RUN_TEST, STOP};      // machine states
+enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
+enum {ROLL, PITCH, YAW};                      // indices of motors
+
+mcp2515_can CAN(SPI_CS_PIN);
+
+////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
 // The expected test parameters are as follows:
 // frequency in Hz {0.5, 5} 
 // stroke in deg {1, 7.5} 
 // load in N {10, 400}
 // duration in ms
 
-enum motorEnum {ROLL, PITCH, YAW};                      // CAN id - 1 of motors
 bool powered[3] = {true, false, false};                 // which motors are powered needs to be > 2
-enum paramEnum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
 volatile float params[4] = {2.0f, 7.5f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 0.0f, mins = 1.00f;          // easy duration set up 
+uint8_t state = BOOT;                                   // current machine state 
+float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
+uint8_t posIndex = 0;                                   // stores current index used for wave array
+uint8_t timeStepGlobal = 0;                             // time between steps on wave
+unsigned long times[2] = {0.0, 0.0};                    // used for measuring whether a cycle has elapsed
+unsigned long timeStart;                                // records the time at which the test starts
+//float cmds[5] = {0.0f, 0.0f, 30.0f, 0.5f, 0.0f};      // parameters sent to motors {P, V, KP, KD, To};
+//volatile float zeroFactors[3] = {0.0f, 0.0f, 0.0f};   // used to adjust the zero point of commands sent to motor
 
-////////////////////////////// Machine States //////////////////////////////
-enum states {USER_INPUT, BOOT, RUN_TEST, STOP};
-uint8_t state = BOOT;
-
-////////////////////////////// Pin Definitions //////////////////////////////
-#define CAN_INT_PIN 3
-#define SPI_CS_PIN 9
-
-////////////////////////////// Library Imports //////////////////////////////
-#include <SPI.h>                          // Used for packing CAN messages
-#include <mcp2515_can.h>                  // Used for packing CAN messages
-mcp2515_can CAN(SPI_CS_PIN);
-
-#include <Wire.h>                         // Used for networking between Arduinos
-#include "motorMode.h"                    // Custom, used to organize motor communications
-#include "motorPackets.h"                 // Custom, used for organize motor communications
-#include "waveforms.h"                    // array of hardcoded sine wave positions
-#include <math.h>
-
-const unsigned long BAUD_RATE = 115200;
-
-////////////////////////////// time/position definitions //////////////////////////////
-float cmds[5] = {0.0f, 0.0f, 30.0f, 0.5f, 0.0f};    // {P, V, KP, KD, To};
-float conversionFactor = 0.0f;                      // motor input equivalent to user specified deg's of rotation
-volatile float zeroFactors[3] = {0.0f, 0.0f, 0.0f}; // used to adjust the zero point of commands sent to motor
-
-////////////////////////////// time/position definitions //////////////////////////////
-uint8_t timeStepGlobal = 0;               // time between steps on wave
-uint8_t posIndex = 0;                     // stores current index used for wave array
-unsigned long times[2] = {0.0, 0.0};      // used for measuring whether a cycle has elapsed
-unsigned long timeStart;                  // records the time at which the test starts
-
+////////////////////////////// Custom Object Declarations //////////////////////////////
+CubeMarsAK motors[NUM_MOTORS];
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup() 
 {
   mySerialBegin();
+  for (int i = 0; i < NUM_MOTORS; i++) 
+  {
+    uint8_t id = i+3; 
+    motors[i].setID(id);
+    motors[i].setPower(powered[i]);
+  }
   //Wire.begin();
 }
 
@@ -83,7 +87,7 @@ void loop()
 void boot() 
 {
   checkCANShield();
-  initMotors();
+  for (int i = 0; i < 3; i++) {motors[i].boot();}
   params[DURATION] = getMillis(days, hours, mins);
   timeStepGlobal = getStepTime(params[FREQUENCY]);
   conversionFactor = 2 * params[STROKE] * 0.017125f;
@@ -125,15 +129,7 @@ void oscillate(uint8_t stepTime)
     float p = getPosition();                          // record current step of path
     for (int i = 0; i < 3; i++)                       // iterate through motors
     {                     
-      if (powered[i])                                 // check if motor is on
-      {                               
-        cmds[P] = p + zeroFactors[i];                 // update position for motor #i, include zero factor
-        pack_cmd(i + 5, cmds);                        // send packet via CAN-Bus
-        unpack_reply();                               // receive packet via CAN-Bus
-        #ifdef DEBUG
-          Serial.println("");
-        #endif
-      }
+      motors[i].setPos(p);
     }
   }
 }
@@ -160,9 +156,9 @@ void stopTest()
 {
   for (int i = 0; i < 3; i++) 
   {
-    powered[i] = false;
+    motors[i].setPower(false);
+    motors[i].boot();
   }
-  initMotors();
 }
 
 float getPosition() 
@@ -193,6 +189,7 @@ void checkCANShield()
 #endif
 }
 
+/*
 void initMotors() 
 {
   for (int i = 0; i < 3; i++)  
@@ -212,7 +209,7 @@ void initMotors()
       exitMotorMode(i);
     }
   }
-}
+}*/
 
 void mySerialBegin() 
 {
