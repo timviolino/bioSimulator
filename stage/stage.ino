@@ -30,27 +30,32 @@ CubeMarsAK motors[NUM_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {true, false, false};                  // which motors are powered needs to be > 2
+bool powered[3] = {true, false, false};                 // which motors are powered, id needs to be > 2
 volatile float params[4] = {1.0f, 7.5f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 0.0f, mins = 0.30f;          // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
-uint8_t posIndex = 0;                                   // stores current index used for wave array
-uint8_t period = 0;                                     // time between steps on wave
-unsigned long times[2] = {0, 0};                        // used for measuring whether a cycle has elapsed
-unsigned long timeStart;                                // records the time at which the test starts
+uint8_t i_pos = 0;                                      // stores current index used for wave array
+uint8_t t_step = 0;                                     // time between steps on wave
+unsigned long t_start;                                  // records the time at which the test starts
+unsigned long t_lastStep;                               // time at which motors were last actuated
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup() 
 {
   mySerialBegin();
+  setupMotors();
+  //Wire.begin();
+}
+
+void setupMotors() 
+{
   for (int i = 0; i < NUM_MOTORS; i++) 
   {
-    uint8_t id = i+3; 
+    uint8_t id = i+3;
     motors[i].setID(id);
     motors[i].setPower(powered[i]);
   }
-  //Wire.begin();
 }
 
 void loop() 
@@ -68,7 +73,7 @@ void loop()
       break;
 
     case RUN_TEST:
-      oscillate(period);
+      oscillate(t_step);
       checkDuration();
       break;
 
@@ -84,61 +89,56 @@ void boot()
 {
   checkCANShield();
   for (int i = 0; i < 3; i++) {motors[i].boot();}
-  params[DURATION] = getMillis(days, hours, mins);
-  period = getPeriod(params[FREQUENCY]);
   conversionFactor = 2 * params[STROKE] * 0.017125f;
-  timeStart = millis();
-  times[0] = timeStart;
+  params[DURATION] = getMillis(days, hours, mins);
+  t_step = get_t_step(params[FREQUENCY]);
+  t_start = millis();
+  t_lastStep = t_start;
 }
 
-uint8_t getPeriod(float frequency) {
+unsigned long get_t_step(float frequency) {
   float stepsPerSec, msPerStep;
-  int delta_t;
-  if(frequency == 0) { delta_t = 10000;}
+  unsigned long t_step;
+  if(frequency == 0) { t_step = 10000;}
   else
   {
     stepsPerSec = float(STEPS * frequency);
     msPerStep = 1000.0f/stepsPerSec;
-    delta_t = int(msPerStep);
+    t_step = int(msPerStep);
   }
-  return delta_t;
+  return t_step;
 }
 
 void checkDuration() 
 {
-  unsigned long elapsedTime = times[1] - timeStart;   // record total elapsed time
-  if (elapsedTime > params[DURATION]) 
-  {
-    state = STOP;                                     // if elapsed time is greater than test duration: stop test
-  }
+  unsigned long del_t = get_del_t(t_start);             // record total elapsed time
+  if (del_t > params[DURATION]) {state = STOP;}         // if elapsed time is greater than test duration: stop test
 }
 
-void oscillate(uint8_t stepTime) 
+void oscillate(unsigned long t_step) 
 {
-  times[1] = millis();                                // check what time it is
-  if (times[1] - times[0] > stepTime)                 // else if time between steps has elapsed, actuate motor
+  unsigned long del_t = get_del_t(t_lastStep);           // record time since last step
+  if (del_t > t_step)                                    // check if time between steps has elapsed
   {               
-    times[0] = times[1];                              // update time value
-    float p = getPosition();                          // record current step of path
-    for (int i = 0; i < 3; i++)                       // iterate through motors
-    {                     
-      motors[i].setPos(p);
-    }
+    t_lastStep += del_t;                                 // update time of last step                            
+    float p = getPosition();                             // record position on sine wave
+    for (int i = 0; i < 3; i++) {motors[i].setPos(p);}   // iterate through motors
   }
 }
 
 void ramp(float f0, float f1) 
 {
-  float delta_f = f1-f0;
-  float dir = copysign(1, delta_f);
-  uint8_t i0, i1, delta_t;
-  while (dir*(f1-f0) >= 0)
+  const float del_f = f1-f0;
+  const float dir = copysign(1, del_f);
+  uint8_t p_i0, p_i1;
+  unsigned long t_step;
+  while (dir*(del_f) >= 0)
   {
-    delta_t = getPeriod(f0);
-    i0 = posIndex;
-    oscillate(delta_t);
-    i1 = posIndex;
-    if (i0 != i1 && i0 % 30 == 0) 
+    t_step = get_t_step(f0);
+    p_i0 = i_pos;
+    oscillate(t_step);
+    p_i1 = i_pos;
+    if (p_i0 != p_i1 && p_i0 % 30 == 0) 
     {
       f0 += dir*0.2;
     }
@@ -156,14 +156,10 @@ void stopTest()
 
 float getPosition() 
 {
-  float p = 0.0f;
-  p = float(pgm_read_word_near(waveformsTable + posIndex));  // read current value out from table
-  p = (p - 2047.5) * conversionFactor / 2047.5;              // convert to "motor radians"
-  posIndex++;                                                // increment position index
-  if (posIndex == STEPS) 
-  {
-    posIndex = 0;                                            // reset index at end of array
-  }
+  float p = float(pgm_read_word_near(waveformsTable + i_pos));  // read current value out from table
+  p = (p - 2047.5) * conversionFactor / 2047.5;                 // convert to "motor radians"
+  i_pos++;                                                      // increment position index
+  if (i_pos == STEPS) {i_pos = 0;}                              // reset index at end of array
   return p;
 }
 
@@ -182,27 +178,14 @@ void checkCANShield()
 #endif
 }
 
-/*
-void initMotors() 
+void sendLoad() 
 {
-  for (int i = 0; i < 3; i++)  
-  {
-    if (powered[i] == 1) 
-    {
-      int id = i+5;
-      enterMotorMode(id);
-      delay(2500);
-      zeroFactors[i] = readPosition();
-      #ifdef DEBUG
-        Serial.println("ID: " + String(id) + " Zero Factor = " + String(zeroFactors[i]));
-      #endif
-    }
-    else 
-    {
-      exitMotorMode(i);
-    }
-  }
-}*/
+  Wire.beginTransmission(9);
+  Wire.write(int(params[LOAD]));
+  Wire.endTransmission();
+}
+
+//////////////////////////// Generic Helper Functions //////////////////////////////////
 
 void mySerialBegin() 
 {
@@ -215,9 +198,8 @@ float getMillis(float days, float hours, float mins)
   return days*86400000.f + hours*3600000.f + mins*60000.f;
 }
 
-void sendLoad() 
+unsigned long get_del_t(unsigned long t0) 
 {
-  Wire.beginTransmission(9);
-  Wire.write(int(params[LOAD]));
-  Wire.endTransmission();
+  unsigned long t = millis();
+  return t-t0;
 }
