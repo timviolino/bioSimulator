@@ -1,5 +1,5 @@
 #include "CubeMarsAK.h"
-#define DEBUG
+//#define DEBUG
 #define SPI_CS_PIN 9
 
 
@@ -27,9 +27,7 @@ void CubeMarsAK::boot() {
   {
     _setMotorMode(MODES[ENTER]);
     for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = 0.0f;}
-    _zero = 0.0f;
     setPos(0.0f);
-    //_setZero();
     _setMotorMode(MODES[ZERO]);
     for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = INITS[i];}
     delay(2500);
@@ -38,12 +36,10 @@ void CubeMarsAK::boot() {
 }
 
 void CubeMarsAK::setPos(float p) {
-  if(_powered)
-  {
-    _cmds[P] = p + _zero;
-    _packCmds();
-    _unpackReply();
-  }
+  if(!_powered) {return;}
+  _cmds[P] = p;
+  _packCmds();
+  _unpackReply();
 }
 
 void CubeMarsAK::setID(uint8_t id) {
