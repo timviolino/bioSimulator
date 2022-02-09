@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 
 ////////////////////////////// Libraries //////////////////////////////
 #include <SPI.h>                          // Used for packing CAN messages
@@ -21,6 +21,7 @@ enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
 
 mcp2515_can CAN(SPI_CS_PIN);
+CubeMarsAK motors[NUM_MOTORS];
 
 ////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
 // The expected test parameters are as follows:
@@ -29,20 +30,15 @@ mcp2515_can CAN(SPI_CS_PIN);
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {true, false, false};                 // which motors are powered needs to be > 2
-volatile float params[4] = {2.0f, 7.5f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
-float days = 0.0f, hours = 0.0f, mins = 1.00f;          // easy duration set up 
+bool powered[3] = {true, false, false};                  // which motors are powered needs to be > 2
+volatile float params[4] = {1.0f, 7.5f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
+float days = 0.0f, hours = 0.0f, mins = 0.30f;          // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t posIndex = 0;                                   // stores current index used for wave array
-uint8_t timeStepGlobal = 0;                             // time between steps on wave
+uint8_t period = 0;                                     // time between steps on wave
 unsigned long times[2] = {0, 0};                        // used for measuring whether a cycle has elapsed
 unsigned long timeStart;                                // records the time at which the test starts
-//float cmds[5] = {0.0f, 0.0f, 30.0f, 0.5f, 0.0f};      // parameters sent to motors {P, V, KP, KD, To};
-//volatile float zeroFactors[3] = {0.0f, 0.0f, 0.0f};   // used to adjust the zero point of commands sent to motor
-
-////////////////////////////// Custom Object Declarations //////////////////////////////
-CubeMarsAK motors[NUM_MOTORS];
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup() 
@@ -72,7 +68,7 @@ void loop()
       break;
 
     case RUN_TEST:
-      oscillate(timeStepGlobal);
+      oscillate(period);
       checkDuration();
       break;
 
@@ -89,24 +85,21 @@ void boot()
   checkCANShield();
   for (int i = 0; i < 3; i++) {motors[i].boot();}
   params[DURATION] = getMillis(days, hours, mins);
-  timeStepGlobal = getStepTime(params[FREQUENCY]);
+  period = getPeriod(params[FREQUENCY]);
   conversionFactor = 2 * params[STROKE] * 0.017125f;
   timeStart = millis();
   times[0] = timeStart;
 }
 
-uint8_t getStepTime(float frequency) {
+uint8_t getPeriod(float frequency) {
   float stepsPerSec, msPerStep;
   int delta_t;
-  if(frequency != 0) 
+  if(frequency == 0) { delta_t = 10000;}
+  else
   {
     stepsPerSec = float(STEPS * frequency);
     msPerStep = 1000.0f/stepsPerSec;
     delta_t = int(msPerStep);
-  }
-  else
-  {
-    delta_t = 10000;
   }
   return delta_t;
 }
@@ -141,7 +134,7 @@ void ramp(float f0, float f1)
   uint8_t i0, i1, delta_t;
   while (dir*(f1-f0) >= 0)
   {
-    delta_t = getStepTime(f0);
+    delta_t = getPeriod(f0);
     i0 = posIndex;
     oscillate(delta_t);
     i1 = posIndex;

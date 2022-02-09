@@ -23,13 +23,18 @@ CubeMarsAK::CubeMarsAK(uint8_t id, bool powered)
   {}
 
 void CubeMarsAK::boot() {
-  byte mode;
-  if(_powered) {mode = MODES[ENTER];}
-  else {mode = MODES[EXIT];}
-  _setMotorMode(mode);
-  _setZero();
-  for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = INITS[i];}
-  delay(2500);
+  if(_powered) 
+  {
+    _setMotorMode(MODES[ENTER]);
+    for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = 0.0f;}
+    _zero = 0.0f;
+    setPos(0.0f);
+    //_setZero();
+    _setMotorMode(MODES[ZERO]);
+    for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = INITS[i];}
+    delay(2500);
+  }
+  else {_setMotorMode(MODES[EXIT]);}
 }
 
 void CubeMarsAK::setPos(float p) {
@@ -65,7 +70,7 @@ void CubeMarsAK::_setZero() {
 }
 
 void CubeMarsAK::_packCmds() {
-  unsigned int _cmdInts[CMDS_LENGTH] = {};
+  unsigned int _cmdInts[CMDS_LENGTH];
   for (int i=0; i<CMDS_LENGTH; i++) 
   {
     _cmds[i] = constrain(_cmds[i], MINS[i], MAXES[i]);                    // limit data to be within bounds
@@ -73,8 +78,10 @@ void CubeMarsAK::_packCmds() {
   }
   
 #ifdef DEBUG
-  Serial.print("_id: " + String(_id));
+  Serial.print("id: " + String(_id));
   Serial.print(" |Pck| p: (" + String(_cmds[P]) + ", " + String(_cmdInts[P]) + ")");
+  Serial.print(" v: " + String(_cmds[V]));
+  Serial.print(" t: " + String(_cmds[To]));
 #endif
 
   /// pack ints into the can buffer, bit 0 is LSB ///
