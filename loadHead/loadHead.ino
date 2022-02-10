@@ -1,7 +1,9 @@
 #define DEBUG
 
+#include <HX711.h>
+
 ////////////////////////////// Test Parameter definitions ///////////////////////////////
-volatile int goalLoad = 200;                    // load set by the user
+volatile int goalLoad = 50;                    // load set by the user
 float deadband = 0.5f;                         // hold load with 1% of load
 
 ////////////////////////////// States ///////////////////////////////
@@ -16,14 +18,14 @@ const unsigned long baudRate = 9600;
 ////////////////////////////// Linear Actuator definitions ///////////////////////////////
 #define RPWM 10                                   // connect Arduino pin 10 to IBT-2 pin RPWM
 #define LPWM 11                                   // connect Arduino pin 11 to IBT-2 pin LPWM
-const float MIN_SPEED = 43.0f;                    // set min speed for linear actuator
+//NEED TO ADD RAMP DOWN AT START OR ELSE MOTOR GETS STUCK
+const float MIN_SPEED = 55.0f;                    // set min speed for linear actuator 
 const float MAX_SPEED = 90.0f;                    // set max speed for linear actuator
 const float SPEED_RANGE = MAX_SPEED - MIN_SPEED;
 byte testSpeed = MIN_SPEED;                       // variable used to store actual speed
 
 
 //////////////////////////// Scale definitions //////////////////////////////
-#include "HX711.h"
 #define DAT 3
 #define CLK 2
 HX711 scale;
@@ -139,7 +141,7 @@ void initLinearActuator() {
   }
   
   // retract actuator to ensure load cell tares properly
-  int retractTime = 500+loadRatio*500;
+  int retractTime = 6000;
   setMotorSpeed(-MAX_SPEED);
   delay(retractTime);
   setMotorSpeed(0);

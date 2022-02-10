@@ -1,5 +1,4 @@
 #include "CubeMarsAK.h"
-//#define DEBUG
 #define SPI_CS_PIN 9
 
 

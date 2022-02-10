@@ -62,10 +62,10 @@ uint16_t cursorPos = FREQUENCY;
 unsigned long startTime;
 
 ///////////////////// Custom Objects /////////////////////
-Button *uploadButton;
-Button *startButton;
-Button *stopButton;
-Button *restartButton;
+Button uploadButton = Button("Upload", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
+Button startButton = Button("Start Test", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
+Button stopButton = Button("Stop Test", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_RED);
+Button restartButton = Button("Restart", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
 Label *title;
 
 
@@ -106,7 +106,7 @@ void loop()
       updateCursor();
       myPrint("Parameters", 0, MARGIN, TEXT_SIZES[TITLES], COLORS[TEXT], true);
       printOptions();
-      uploadButton -> draw();
+      uploadButton.draw();
     break;
     
     case UPLOAD:
@@ -130,13 +130,6 @@ void initBoot() {
   tft.fillScreen(COLORS[BACKGROUND]);
   title = new Label(tft, "bioSimulator", MARGIN + 2*ROW_HEIGHT, TEXT_SIZES[TITLES]);
   title -> draw(true);
-}
-
-///////////////////// Setup Helpers /////////////////////
-void mySerialBegin() 
-{
-  Serial.begin(BAUD_RATE);
-  while(!Serial);
 }
 
 void initTFT() 
@@ -228,12 +221,6 @@ void updateParam(uint16_t i, int8_t x)
   dtostrf(params[i], PARAMS_CHARS[i], 1, labels[i][1]);
 }
 
-uint16_t wrap(int16_t x, int16_t x0, int16_t x1) 
-{
-  if (x > x1) {return x0;}
-  else if (x < x0) {return x1;}
-  return x;
-}
 
 void upload()
 {
@@ -249,33 +236,25 @@ void nextState()
   {
     case USER_INPUT:
       moveCursor(0, 0);
-      uploadButton = new Button(tft, "Upload", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
+      uploadButton.setTFT(tft);
     break;
     case UPLOAD:
-      startButton = new Button(tft, "Start Test", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
-      startButton -> select();
-      startButton -> draw();
+      startButton.setTFT(tft);
+      startButton.select();
+      startButton.draw();
     break;
     case RUN_TEST:
       startTime = millis();
-      Serial.println("Stop Test Created");
-      stopButton = new Button(tft, "Stop Test", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_RED);
-      stopButton -> select();
-      stopButton -> draw();
+      stopButton.setTFT(tft);
+      stopButton.select();
+      stopButton.draw();
     break;
     case COMPLETE:
-      restartButton = new Button(tft, "Restart", MARGIN+(NUM_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
-      restartButton -> select();
-      restartButton -> draw();
+      restartButton.setTFT(tft);
+      restartButton.select();
+      restartButton.draw();
     break;
   }
-}
-
-unsigned long getTimeSince(unsigned long t0) 
-{
-  const unsigned long t = millis();
-  const unsigned long del_t = t-t0;
-  return del_t;
 }
 
 void printProgressBar()
@@ -286,7 +265,7 @@ void printProgressBar()
   const uint16_t w0 = WIDTH-2*MARGIN; 
   const uint16_t h = ROW_HEIGHT;
   const int16_t x = (WIDTH-w0)/2;
-  float del_t = getTimeSince(startTime);
+  float del_t = get_del_t(startTime);
   float percent = del_t/(params[HOURS]*10000.f);
   const uint16_t w1 = w0*percent;
 
@@ -313,7 +292,7 @@ void moveCursor(uint16_t p0, uint16_t p1)
     y = MARGIN + (p0+1)*ROW_HEIGHT;
     erase("000.0", x, y, TEXT_SIZES[LABELS]);
   }
-  else {uploadButton -> deselect();}
+  else {uploadButton.deselect();}
   
   // print next cursor
   if (p1 != UPLOAD_BUTTON) 
@@ -323,7 +302,7 @@ void moveCursor(uint16_t p0, uint16_t p1)
     erase(label, x, y, TEXT_SIZES[OPTIONS]);
     myPrint(label, x, y, TEXT_SIZES[LABELS], COLORS[TEXT], false);
   }
-  else {uploadButton -> select();}
+  else {uploadButton.select();}
   
   cursorPrinted = true;
 }
@@ -334,7 +313,7 @@ void blinkCursor(uint16_t p)
   int x = MARGIN + COL_WIDTHS[0];
   int y = MARGIN + (p+1)*ROW_HEIGHT;
   uint16_t textSize = TEXT_SIZES[LABELS];
-  unsigned long del_t = getTimeSince(timeSinceBlink);
+  unsigned long del_t = get_del_t(timeSinceBlink);
    
   if (del_t < blinkTime) {
     myPrint(label, x, y, textSize, COLORS[TEXT], false);
@@ -389,4 +368,25 @@ void myPrint(String label, int16_t x, int16_t y, uint16_t textSize, uint16_t tex
   }
   tft.setCursor(x, y);
   tft.println(label);
+}
+
+
+//////////////////////////// Generic Helper Functions ////////////////////////////
+unsigned long get_del_t(unsigned long t0) 
+{
+  const unsigned long t = millis();
+  return t-t0;
+}
+
+uint16_t wrap(int16_t x, int16_t x0, int16_t x1) 
+{
+  if (x > x1) {return x0;}
+  else if (x < x0) {return x1;}
+  return x;
+}
+
+void mySerialBegin() 
+{
+  Serial.begin(BAUD_RATE);
+  while(!Serial);
 }

@@ -10,7 +10,7 @@
 class Button : public GUIBase {
   
   private:
-    Adafruit_HX8357 tft;
+    Adafruit_HX8357 _tft;
     const String text;
     const int16_t y; 
     const uint16_t fillColor;
@@ -22,8 +22,9 @@ class Button : public GUIBase {
     
   
   public:
-    Button(Adafruit_HX8357 &tft, const String text, const int16_t y, const uint16_t fillColor) ;
+    Button(const String text, const int16_t y, const uint16_t fillColor);
     
+    void setTFT(Adafruit_HX8357 tft);
     void select();
     void deselect();
     void draw();
