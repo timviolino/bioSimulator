@@ -3,10 +3,7 @@
 #include <mcp2515_can.h>                  // Used for packing CAN messages
 #include "CubeMarsAK.h"                   // Cube Mars AK Series motor control class 
 #include "waveforms.h"                    // array of hardcoded sine wave positions
-#include <math.h>
 #include <Wire.h>                         // Used for networking between Arduinos
-//#include "motorMode.h"                  // Custom, used to organize motor communications
-//#include "motorPackets.h"               // Custom, used for organize motor communications
 
 ////////////////////////////// Global Constant Defintions //////////////////////////////
 #define CAN_INT_PIN 3
@@ -28,15 +25,15 @@ CubeMarsAK motors[NUM_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {true, true, true};                 // which motors are powered, id needs to be > 2
+bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
-float days = 0.0f, hours = 0.0f, mins = 0.5f;          // easy duration set up 
+float days = 0.0f, hours = 0.0f, mins = 0.5f;           // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
 uint8_t t_step = 0;                                     // time between steps on wave
 unsigned long t_start;                                  // records the time at which the test starts
-unsigned long t_lastStep;                               // time at which motors were last actuated
+unsigned long t_lastStep = 0;                           // time at which motors were last actuated
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup() 
@@ -88,7 +85,7 @@ void boot()
 {
   checkCANShield();
   for (int i = 0; i < 3; i++) {motors[i].boot();}
-  conversionFactor = 2 * params[STROKE] * 0.017125f;
+  conversionFactor = 2 * degToRad(params[STROKE]);
 }
 
 void bootTiming() 
@@ -100,14 +97,12 @@ void bootTiming()
 }
 
 unsigned long get_t_step(float frequency, uint16_t n_steps) {
-  float stepsPerSec, msPerStep;
-  unsigned long t_step;
-  if(frequency == 0) { t_step = 1000;}
-  else
+  float stepsPerSec;
+  unsigned long t_step = 1000;
+  if(frequency != 0)
   {
     stepsPerSec = float(n_steps * frequency);       // f*120 discrete steps per second
-    msPerStep = 1000.0f/stepsPerSec;                // ms per step
-    t_step = int(msPerStep);                        // convert to int
+    t_step = int(1000.0f/stepsPerSec);              // ms per step converted to int
   }
   return t_step;
 }
@@ -133,10 +128,10 @@ void ramp(float f0, float f1)
 {
   float f = f0;
   const float dir = copysign(1, f1-f0);
-  const float f_step = 0.2f;
-  unsigned long t_step;
-  const unsigned long t_fstep = 500;
+  const float f_step = 0.1f;
+  const unsigned long t_fstep = 250;
   unsigned long t_last_fstep = millis();
+  unsigned long t_step;
   const uint8_t i_step = 4;
   while (dir*(f1-f) > f_step)
   {
@@ -147,11 +142,7 @@ void ramp(float f0, float f1)
     {
       f += dir*f_step;
       t_last_fstep += del_t;
-      //Serial.println("frequency: " + String(f));
     }
-    //Serial.print("del_t: " + String(del_t));
-    //Serial.print(" i_pos: " + String(i_pos));
-    //Serial.print(" t_step: " + String(t_step));
   }
 }
 
@@ -196,7 +187,6 @@ void sendLoad()
 }
 
 //////////////////////////// Generic Helper Functions //////////////////////////////////
-
 void mySerialBegin() 
 {
   Serial.begin(BAUD_RATE);
@@ -212,4 +202,10 @@ unsigned long get_del_t(unsigned long t0)
 {
   unsigned long t = millis();
   return t-t0;
+}
+
+float degToRad(float deg)
+{
+  const float K = 0.017125f;      // Note, there is a slight offset per radian in the encoder, hence the deviation from 0.01745 
+  return deg*K;
 }

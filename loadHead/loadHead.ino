@@ -1,45 +1,35 @@
 #define DEBUG
 
-#include <HX711.h>
+////////////////////////////// Library Imports ///////////////////////////////
+#include <HX711.h>                            // Used for reading load cell amplifier
+#include <Wire.h>                             // Used for Arduino networking
 
-////////////////////////////// Test Parameter definitions ///////////////////////////////
-volatile int goalLoad = 50;                    // load set by the user
-float deadband = 0.5f;                         // hold load with 1% of load
+////////////////////////////// Constant Value Definitions ///////////////////////////////
+#define CLK 2                                     // connect Arduino pin D2 to HX711 CLK
+#define DAT 3                                     // connect Arduino pin D3 to HX711 DAT 
+#define RPWM 10                                   // connect Arduino pin D10 to IBT-2 pin RPWM
+#define LPWM 11                                   // connect Arduino pin D11 to IBT-2 pin LPWM
+enum {USER_INPUT, BOOT, RUN_TEST, STOP};          // indices used for accessing machine states
+enum {MIN, MAX, RAMP};                            // indices used for accessing physical constants
+const uint8_t SPEEDS[3] = {43, 90, 55};           // start up speed used to prevent linear actuator 'sticking'
+const uint16_t LOADS[2] = {50, 400};              // load capacities of system [N]
+const uint32_t t_RETRACT = 6000;                  // time for linear actuator to retract at beginning of test
+const int64_t CALIBRATION_FACTOR = -7050;         // factor used to calibrate laod cell with known weight
+const uint64_t BAUD_RATE = 9600;                  // baud rate used for serial communications with IDE
 
-////////////////////////////// States ///////////////////////////////
-enum stateEnum {USER_INPUT, BOOT, RUN_TEST, STOP}; 
-uint8_t state = BOOT;
-
-////////////////////////////// Serial definitions ///////////////////////////////
-#include <Wire.h>
-const unsigned long baudRate = 9600;
-
-
-////////////////////////////// Linear Actuator definitions ///////////////////////////////
-#define RPWM 10                                   // connect Arduino pin 10 to IBT-2 pin RPWM
-#define LPWM 11                                   // connect Arduino pin 11 to IBT-2 pin LPWM
-//NEED TO ADD RAMP DOWN AT START OR ELSE MOTOR GETS STUCK
-const float MIN_SPEED = 55.0f;                    // set min speed for linear actuator 
-const float MAX_SPEED = 90.0f;                    // set max speed for linear actuator
-const float SPEED_RANGE = MAX_SPEED - MIN_SPEED;
-byte testSpeed = MIN_SPEED;                       // variable used to store actual speed
-
-
-//////////////////////////// Scale definitions //////////////////////////////
-#define DAT 3
-#define CLK 2
-HX711 scale;
-const float MIN_LOAD = 50.0;                      // minimum load at which 1% precision is achievable
-const float MAX_LOAD = 400.0;                     // maximum load capacity of system [N]
-const int CALIBRATION_FACTOR = -7050;             // factor used to calibrate laod cell with known weight
+////////////////////////////// Global Variable Declarations ///////////////////////////////
+uint8_t state = BOOT;                             // stores the current state of the machine
+uint8_t testSpeed = SPEEDS[MIN];                  // variable used to store actual speed
+volatile uint16_t goalLoad = 50;                  // load set by the user
+float deadband = 0.5f;                            // hold load with 1% of load
 float loadRatio = 0.0f;                           // stores percentage of max load test is operating at
 
+//////////////////////////// Object Declarations //////////////////////////////
+HX711 scale;
 
 //////// Main Functions ////////
 void setup() {
-  //delay(3000);
   mySerialBegin();
-  pinMode(LED_BUILTIN, OUTPUT);
   Wire.begin(9);
   Wire.onReceive(receiveEvent);
 }
@@ -55,6 +45,7 @@ void loop() {
     case BOOT:
       initLinearActuator();
       initLoadCell();
+      initVariables();
       state = RUN_TEST;
       break;
       
@@ -84,26 +75,17 @@ void runTest() {
   if (loadOffset < -deadband) {setMotorSpeed(-testSpeed);}
   else if (loadOffset > deadband) {setMotorSpeed(testSpeed);}
   setMotorSpeed(0);
-
-#ifdef DEBUG
-  Serial.print("Goal Load = " + String(goalLoad));
-  Serial.println(" | Test Speed = " + String(testSpeed) + " | Deadband = " + String(deadband));
-  Serial.println("");                                 // clear serial com line
-#endif
 }
 
 volatile float readLoad() {
   volatile float load = 0.00f;
-  if (scale.is_ready()) {
-    load = 9.81 * scale.get_units(2);
-  }
-
-#ifdef DEBUG
+  if (scale.is_ready()) {load = 9.81f * scale.get_units(2);}
+  
+  #ifdef DEBUG
   Serial.print("Load = ");
   Serial.print(load, 2);
-  Serial.print(" N | ");
-#endif
-
+  #endif
+  
   return load;
 }
 
@@ -115,42 +97,28 @@ void setMotorSpeed(int motorSpeed) {
   delay(30);                                                   // Minimum travel time
 }
 
-void mySerialBegin() {
-  Serial.begin(baudRate);
-  while (!Serial); // wait for serial
-}
-
 void initLinearActuator() {
+  pinMode(RPWM, OUTPUT);        // configure pin 10 as an output
+  pinMode(LPWM, OUTPUT);        // configure pin 11 as an output
+  
 #ifdef DEBUG
   Serial.println("");
   Serial.println("Beginning linear actuator program");
-#endif
-
-  pinMode(RPWM, OUTPUT); // Configure pin 10 as an output
-  pinMode(LPWM, OUTPUT); // Configure pin 11 as an output
-
-#ifdef DEBUG
   Serial.println("Retracting Actuator");
 #endif
+  
+  setMotorSpeed(-SPEEDS[MAX]);  // retract actuator to ensure load cell tares properly
+  delay(t_RETRACT);
+  setMotorSpeed(0);
+}
 
-  // set variables 
-  if(goalLoad > MIN_LOAD) {
-    loadRatio = (float(goalLoad)-MIN_LOAD)/MAX_LOAD;
-    testSpeed = MIN_SPEED + loadRatio*SPEED_RANGE;
+void initVariables()
+{
+  if(goalLoad > LOADS[MIN]) {
+    loadRatio = (float(goalLoad)-LOADS[MIN])/LOADS[MAX];
+    testSpeed = SPEEDS[MIN] + loadRatio*(SPEEDS[MAX]-SPEEDS[MIN]);
     deadband = goalLoad*0.01;
   }
-  
-  // retract actuator to ensure load cell tares properly
-  int retractTime = 6000;
-  setMotorSpeed(-MAX_SPEED);
-  delay(retractTime);
-  setMotorSpeed(0);
-  
-  
-
-#ifdef DEBUG
-  Serial.println("Retract Time = " + String(retractTime));
-#endif
 }
 
 void initLoadCell() {
@@ -165,10 +133,26 @@ void initLoadCell() {
   Serial.println("Taring scale");
 #endif
 
-  scale.tare(); //Reset the scale to 0
+  scale.tare();                         //Reset the scale to 0
 
 #ifdef DEBUG
   Serial.println("Beginning loop...");
 #endif
+}
 
+void printVariables()
+{
+  #ifdef DEBUG
+    
+    Serial.print(" N | ");
+    Serial.print("Goal Load = " + String(goalLoad));
+    Serial.println(" | Test Speed = " + String(testSpeed) + " | Deadband = " + String(deadband));
+    Serial.println("");       // clear serial com line
+  #endif
+}
+
+/////////////////////////////// Generic Helper Functions ///////////////////////////////
+void mySerialBegin() {
+  Serial.begin(BAUD_RATE);    // begin serial communications at BAUD_RATE
+  while (!Serial);            // wait for serial
 }
