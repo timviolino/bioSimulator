@@ -10,11 +10,11 @@
 class Button : public GUIBase {
   
   private:
-    Adafruit_HX8357 _tft;
     const String text;
     const int16_t y; 
     const uint16_t fillColor;
     
+    Adafruit_HX8357& _tft;
     int16_t x;
     volatile uint16_t textColor = COLORS[BACKGROUND];
     volatile bool backgroundPrinted = false;

@@ -6,11 +6,10 @@
 #include <Wire.h>                         // Used for networking between Arduinos
 
 ////////////////////////////// Global Constant Defintions //////////////////////////////
-#define CAN_INT_PIN 3
-#define SPI_CS_PIN 9
-
+#define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
+#define SPI_CS_PIN 9                          // attach to arduino pin d4
 #define NUM_MOTORS 3                          // number of motors 
-const unsigned long BAUD_RATE = 230400;       // rate of communications over serial bus 
+const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
 enum {USER_INPUT, BOOT, RUN_TEST, STOP};      // machine states
 enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
@@ -27,7 +26,7 @@ CubeMarsAK motors[NUM_MOTORS];
 
 bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
-float days = 0.0f, hours = 0.0f, mins = 0.5f;           // easy duration set up 
+float days = 0.0f, hours = 4.0f, mins = 0.0f;          // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
@@ -85,7 +84,7 @@ void boot()
 {
   checkCANShield();
   for (int i = 0; i < 3; i++) {motors[i].boot();}
-  conversionFactor = 2 * degToRad(params[STROKE]);
+  conversionFactor = degToRad(params[STROKE]);
 }
 
 void bootTiming() 

@@ -29,7 +29,6 @@ void CubeMarsAK::boot() {
     setPos(0.0f);
     _setMotorMode(MODES[ZERO]);
     for (int i = 0; i < CMDS_LENGTH; i++) {_cmds[i] = INITS[i];}
-    delay(2500);
   }
   else {_setMotorMode(MODES[EXIT]);}
 }
@@ -74,7 +73,9 @@ void CubeMarsAK::_packCmds() {
   
 #ifdef DEBUG
   Serial.print("id: " + String(_id));
-  Serial.print(" |Pck| p: (" + String(_cmds[P]) + ", " + String(_cmdInts[P]) + ")");
+  Serial.print(" |Pck| p: (");
+  Serial.print(_cmds[P], 4); 
+  Serial.print(", " + String(_cmdInts[P]) + ")");
   Serial.print(" v: " + String(_cmds[V]));
   Serial.print(" t: " + String(_cmds[To]));
 #endif
@@ -130,7 +131,7 @@ void CubeMarsAK::_setMotorMode(byte mode){
  #ifdef DEBUG
  Serial.println("Motor id " + String(_id) + " Mode: " + String(mode));
  #endif
- delay(100);
+ delay(1000);
 }
 
 unsigned int CubeMarsAK::_float_to_uint(float x, float x_min, float x_max, int bits){
