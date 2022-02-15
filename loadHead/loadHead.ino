@@ -1,8 +1,9 @@
-#define DEBUG
+//#define DEBUG
 
 ////////////////////////////// Library Imports ///////////////////////////////
 #include <HX711.h>                            // Used for reading load cell amplifier
 #include <Wire.h>                             // Used for Arduino networking
+#include "LinearActuator.h"                   // custom linear actuator control class
 
 ////////////////////////////// Constant Value Definitions ///////////////////////////////
 #define CLK 2                                     // connect Arduino pin D2 to HX711 CLK
@@ -11,27 +12,29 @@
 #define LPWM 11                                   // connect Arduino pin D11 to IBT-2 pin LPWM
 enum {USER_INPUT, BOOT, RUN_TEST, STOP};          // indices used for accessing machine states
 enum {MIN, MAX, RAMP};                            // indices used for accessing physical constants
-const uint8_t ADDRESS = 11;                       // i2c address
-const uint8_t SPEEDS[3] = {43, 90, 55};           // start up speed used to prevent linear actuator 'sticking'
-const uint16_t LOADS[2] = {50, 400};              // load capacities of system [N]
-const uint32_t t_RETRACT = 6000;                  // time for linear actuator to retract at beginning of test
-const int64_t CALIBRATION_FACTOR = -7050;         // factor used to calibrate laod cell with known weight
+const uint8_t ADDY = 11;                          // i2c ADDY
+const uint8_t V[3] = {43, 90, 55};                // start up speed used to prevent linear actuator 'sticking'
+const uint16_t F[2] = {50, 400};                  // load capacities of system [N]
+//const uint32_t t_RETRACT = 6000;                // time for linear actuator to retract at beginning of test
+const int64_t LC_FACTOR = -7050;                  // factor used to calibrate laod cell with known weight
 const uint64_t BAUD_RATE = 9600;                  // baud rate used for serial communications with IDE
 
 ////////////////////////////// Global Variable Declarations ///////////////////////////////
-uint8_t state = USER_INPUT;                       // stores the current state of the machine
-uint8_t testSpeed = SPEEDS[MIN];                  // variable used to store actual speed
-volatile uint16_t goalLoad = 50;                  // load set by the user
-float deadband = 0.5f;                            // hold load with 1% of load
-float loadRatio = 0.0f;                           // stores percentage of max load test is operating at
+uint8_t state = USER_INPUT;              // stores the current state of the machine
+uint8_t v_run = V[MIN];                  // variable used to store actual speed
+volatile uint16_t F_goal = 50;           // load set by the user
+float F_range = 0.5f;                    // hold load with 1% of load
+float F_ratio = 0.0f;                    // stores percentage of max load test is operating at
 
 //////////////////////////// Object Declarations //////////////////////////////
 HX711 scale;
+LinearActuator actuator = LinearActuator(RPWM, LPWM);
+
 
 //////// Main Functions ////////
 void setup() {
   mySerialBegin();
-  Wire.begin(ADDRESS);
+  Wire.begin(ADDY);
   Wire.onReceive(receive);
 }
 
@@ -44,7 +47,7 @@ void loop() {
       break;
       
     case BOOT:
-      initLinearActuator();
+      actuator.init();
       initLoadCell();
       initVariables();
       state = RUN_TEST;
@@ -64,62 +67,38 @@ void loop() {
 //////// Helper Functions ////////
 void receive() {
   if (state == USER_INPUT) {
-    goalLoad = -Wire.read();
-    Serial.println(goalLoad);
+    F_goal = -Wire.read();
     state = BOOT;
   }
   else if (Wire.read() == 1){state = STOP;}
 }
 
 void runTest() {
-  volatile float load = readLoad();                    // record load measurement from sensor [N]
-  float loadOffset = fabs(goalLoad)-fabs(load);
-  if (loadOffset < -deadband) {setMotorSpeed(-testSpeed);}
-  else if (loadOffset > deadband) {setMotorSpeed(testSpeed);}
-  setMotorSpeed(0);
+  volatile float F_read = read_F();                    // record load measurement from sensor [N]
+  float del_F = fabs(F_goal)-fabs(F_read);
+  if (del_F < -F_range) {actuator.setSpeed(-v_run);}
+  else if (del_F > F_range) {actuator.setSpeed(v_run);}
+  actuator.setSpeed(0);
 }
 
-volatile float readLoad() {
-  volatile float load = 0.00f;
-  if (scale.is_ready()) {load = 9.81f * scale.get_units(2);}
+volatile float read_F() {
+  volatile float F_read = 0.00f;
+  if (scale.is_ready()) {F_read = 9.81f * scale.get_units(2);}
   
   #ifdef DEBUG
   Serial.print("Load = ");
-  Serial.print(load, 2);
+  Serial.print(F_read, 2);
   #endif
   
-  return load;
-}
-
-void setMotorSpeed(int motorSpeed) {
-  analogWrite(RPWM, 0);
-  analogWrite(LPWM, 0);
-  if (motorSpeed < 0) {analogWrite(RPWM, abs(motorSpeed));}    // Retract actuator
-  else {analogWrite(LPWM, abs(motorSpeed));}                   // Extend actuator
-  delay(30);                                                   // Minimum travel time
-}
-
-void initLinearActuator() {
-  pinMode(RPWM, OUTPUT);        // configure pin 10 as an output
-  pinMode(LPWM, OUTPUT);        // configure pin 11 as an output
-  
-#ifdef DEBUG
-  Serial.println("");
-  Serial.println("Beginning linear actuator program");
-  Serial.println("Retracting Actuator");
-#endif
-  
-  setMotorSpeed(-SPEEDS[MAX]);  // retract actuator to ensure load cell tares properly
-  delay(t_RETRACT);
-  setMotorSpeed(0);
+  return F_read;
 }
 
 void initVariables()
 {
-  if(goalLoad > LOADS[MIN]) {
-    loadRatio = (float(goalLoad)-LOADS[MIN])/LOADS[MAX];
-    testSpeed = SPEEDS[MIN] + loadRatio*(SPEEDS[MAX]-SPEEDS[MIN]);
-    deadband = goalLoad*0.01;
+  if(F_goal > F[MIN]) {
+    F_ratio = (float(F_goal)-F[MIN])/F[MAX];
+    v_run = V[MIN] + F_ratio*(V[MAX]-V[MIN]);
+    F_range = F_goal*0.01;
   }
 }
 
@@ -129,7 +108,7 @@ void initLoadCell() {
 #endif
 
   scale.begin(DAT, CLK);
-  scale.set_scale(CALIBRATION_FACTOR);  // this value is obtained by calibrating the scale with known weights;
+  scale.set_scale(LC_FACTOR);  // this value is obtained by calibrating the scale with known weights;
 
 #ifdef DEBUG
   Serial.println("Taring scale");
@@ -145,10 +124,8 @@ void initLoadCell() {
 void printVariables()
 {
   #ifdef DEBUG
-    
-    Serial.print(" N | ");
-    Serial.print("Goal Load = " + String(goalLoad));
-    Serial.println(" | Test Speed = " + String(testSpeed) + " | Deadband = " + String(deadband));
+    Serial.print("Goal Load = " + String(F_goal));
+    Serial.println(" | Test Speed = " + String(v_run) + " | F_range = " + String(F_range));
     Serial.println("");       // clear serial com line
   #endif
 }
