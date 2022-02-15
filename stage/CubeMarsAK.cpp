@@ -138,12 +138,12 @@ unsigned int CubeMarsAK::_float_to_uint(float x, float x_min, float x_max, int b
  /// Converts a float to an unsigned int, given range and number of bits ///
  float span = x_max - x_min;
  float offset = x_min;
- unsigned int pgg = 0;
+ uint32_t pgg = 0;
  if (bits == 12){
-   pgg = (unsigned int) ((x-offset)*4095.0/span);
+   pgg = (uint32_t) ((x-offset)*4095.0/span);
  }
  if (bits == 16){
-   pgg = (unsigned int) ((x-offset)*65535.0/span);
+   pgg = (uint32_t) ((x-offset)*65535.0/span);
  }
  return pgg;
 }

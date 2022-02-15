@@ -11,6 +11,7 @@
 #define LPWM 11                                   // connect Arduino pin D11 to IBT-2 pin LPWM
 enum {USER_INPUT, BOOT, RUN_TEST, STOP};          // indices used for accessing machine states
 enum {MIN, MAX, RAMP};                            // indices used for accessing physical constants
+const uint8_t ADDRESS = 11;                       // i2c address
 const uint8_t SPEEDS[3] = {43, 90, 55};           // start up speed used to prevent linear actuator 'sticking'
 const uint16_t LOADS[2] = {50, 400};              // load capacities of system [N]
 const uint32_t t_RETRACT = 6000;                  // time for linear actuator to retract at beginning of test
@@ -18,7 +19,7 @@ const int64_t CALIBRATION_FACTOR = -7050;         // factor used to calibrate la
 const uint64_t BAUD_RATE = 9600;                  // baud rate used for serial communications with IDE
 
 ////////////////////////////// Global Variable Declarations ///////////////////////////////
-uint8_t state = BOOT;                             // stores the current state of the machine
+uint8_t state = USER_INPUT;                       // stores the current state of the machine
 uint8_t testSpeed = SPEEDS[MIN];                  // variable used to store actual speed
 volatile uint16_t goalLoad = 50;                  // load set by the user
 float deadband = 0.5f;                            // hold load with 1% of load
@@ -30,8 +31,8 @@ HX711 scale;
 //////// Main Functions ////////
 void setup() {
   mySerialBegin();
-  Wire.begin(9);
-  Wire.onReceive(receiveEvent);
+  Wire.begin(ADDRESS);
+  Wire.onReceive(receive);
 }
 
 void loop() {
@@ -61,9 +62,10 @@ void loop() {
 }
 
 //////// Helper Functions ////////
-void receiveEvent(int bytes) {
+void receive() {
   if (state == USER_INPUT) {
     goalLoad = -Wire.read();
+    Serial.println(goalLoad);
     state = BOOT;
   }
   else if (Wire.read() == 1){state = STOP;}

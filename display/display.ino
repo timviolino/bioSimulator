@@ -1,7 +1,8 @@
-///////////////////// Library Imports /////////////////////
+////////////////////////////////////////// Library Imports //////////////////////////////////////////
 #include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_HX8357.h>
+#include <Adafruit_HX8357.h>            // https://github.com/adafruit/Adafruit_HX8357_Library
+#include <Wire.h>                       // Used for networking between Arduinos
 #include "Button.h"
 #include "controlKnob.h"
 #include "Label.h"
@@ -20,7 +21,12 @@ enum {OPTIONS, LABELS, TITLES};                                       // indices
 enum {PARAM, VALUE, UNIT};                                            // cols of label array
 enum {FREQUENCY, STROKE, LOAD, HOURS, UPLOAD_BUTTON};                 // indices of cursor position
 enum {BOOT, USER_INPUT, UPLOAD, RUN_TEST, COMPLETE};                  // indices of machine states
+enum {BTN_UPLOAD, BTN_START, BTN_STOP, BTN_RESTART};                  // indices of btn objects
+enum {UI, STAGE, LOAD_HEAD};                                          // indices of arduino addresses
+const uint8_t INO_ADRS[3] = {9, 10, 11};
+const uint8_t PARAM_DESTINATION[3] = {INO_ADRS[STAGE], INO_ADRS[STAGE], INO_ADRS[LOAD_HEAD]};
 const uint8_t N_PARAMS = 4;
+const uint8_t N_BTNS = 4;
 const uint8_t N_OPTIONS = 5;
 const uint8_t S_TEXT[3] = {2, 3, 4};
 const uint8_t S_LABEL[3] = {S_TEXT[OPTIONS], S_TEXT[OPTIONS], S_TEXT[OPTIONS]};
@@ -29,8 +35,19 @@ const uint8_t PARAMS_MIN[N_PARAMS] = {1, 3, 50, 1};
 const float PARAMS_MAX[N_PARAMS] = {5.00, 7.50, 400.0, 744.0};
 const float PARAMS_STEP[N_PARAMS] = {0.1, 0.1, 10, 1};
 const uint16_t COLORS[3] = {HX8357_BLACK, HX8357_GREEN, HX8357_WHITE};
+const uint16_t WIDTH = HX8357_TFTWIDTH;
+const uint16_t HEIGHT = HX8357_TFTHEIGHT;
+const uint8_t MARGIN = 5;
+const uint8_t ROWS = N_OPTIONS + 1;
+const uint8_t COLS = 3;
+const uint16_t ROW_HEIGHT = (HEIGHT-2*MARGIN)/(ROWS);
+const uint16_t COL_WIDTH = (WIDTH-2*MARGIN)/(COLS);
+const uint16_t COL_WIDTHS[3] = {(WIDTH-2*MARGIN)/2, (WIDTH-2*MARGIN)/3, (WIDTH-2*MARGIN)/6};
+const char BTN_TEXT[N_BTNS][11] = {"Upload", "Start Test", "Stop Test", "Restart"};
+const uint16_t BTN_Y = MARGIN+(N_OPTIONS)*ROW_HEIGHT;
+const uint16_t BTN_FILLS[N_BTNS] = {HX8357_GREEN, HX8357_GREEN, HX8357_RED, HX8357_GREEN};
 const uint64_t BAUD_RATE = 115200; 
-const uint64_t BLINK_TIME = 500.0;                                    // time [ms] of cursor blink
+const uint64_t BLINK_TIME = 500;                                        // time [ms] of cursor blink
 
 ////////////////////////////////////////// Global Variable Declarations //////////////////////////////////////////
 bool state_enc = true;                                      // selects options if true, selects values if false
@@ -51,20 +68,8 @@ char labels[N_PARAMS][3][12] =
 
 ///////////////////// Object Declarations /////////////////////
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
-// Grid dimensions defined based on above
-#define WIDTH  tft.width()
-#define HEIGHT  tft.height()
-#define MARGIN  5
-#define ROWS  N_OPTIONS + 1
-#define COLS  3
-#define ROW_HEIGHT  (HEIGHT-2*MARGIN)/(ROWS)
-#define COL_WIDTH  (WIDTH-2*MARGIN)/(COLS)
-const int COL_WIDTHS[3] = {(WIDTH-2*MARGIN)/2, (WIDTH-2*MARGIN)/3, (WIDTH-2*MARGIN)/6};
 controlKnob knob = controlKnob(KNOB_MSB, KNOB_LSB, KNOB_BUTTON);
-Button uploadButton = Button("Upload", MARGIN+(N_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
-Button startButton = Button("Start Test", MARGIN+(N_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
-Button stopButton = Button("Stop Test", MARGIN+(N_OPTIONS)*ROW_HEIGHT, HX8357_RED);
-Button restartButton = Button("Restart", MARGIN+(N_OPTIONS)*ROW_HEIGHT, HX8357_GREEN);
+Button btns[4];
 Label *title;
 
 void setup() 
@@ -72,6 +77,8 @@ void setup()
   mySerialBegin();
   initTFT();
   initControlKnob();
+  initBtns();
+  Wire.begin();
 }
 
 void loop() 
@@ -89,7 +96,7 @@ void loop()
       updateCursor();
       myPrint("Parameters", 0, MARGIN, S_TEXT[TITLES], COLORS[TEXT], true);
       printOptions();
-      uploadButton.draw();
+      btns[BTN_UPLOAD].draw();
     break;
     
     case UPLOAD:
@@ -129,16 +136,22 @@ void initControlKnob()
    attachInterrupt(1, readKnob, CHANGE);
 }
 
-///////////////////// Control Knob Helpers /////////////////////
-void myReadButton()                                      // NOTE this is not an interrupt because both external interrupt pins are used for the encoder
+void initBtns()
 {
-  if(knob.getButtonPush()) {push();}
+  for (uint8_t i = 0; i < N_BTNS; i++) 
+  {
+    Button& btn = btns[i];
+    btn.tft = tft;
+    btn.text = BTN_TEXT[i];
+    btn.y = BTN_Y;
+    btn.fill = BTN_FILLS[i];
+  }
 }
 
-void readKnob() 
-{
-  i_enc += knob.readEncoder();
-}
+///////////////////// Control Knob Helpers /////////////////////
+void myReadButton() {if(knob.getButtonPush()) {push();}}    // NOTE this is not an interrupt because both external interrupt pins are used for the encoder
+
+void readKnob() {i_enc += knob.readEncoder();}
 
 void push() 
 {
@@ -170,7 +183,6 @@ void push()
       state = BOOT;
     break;
   }
-  Serial.println("state = " + String(state));
 }
 
 void updateCursor() 
@@ -179,10 +191,9 @@ void updateCursor()
   {
     if (i_enc != 0) 
     {
-      int oldPos = i_cursor;
-      i_cursor += i_enc;
-      i_cursor = wrap(i_cursor, FREQUENCY, UPLOAD_BUTTON);
-      moveCursor(oldPos, i_cursor);
+      uint8_t i_cursor_last = i_cursor;
+      i_cursor = wrap(i_cursor+i_enc, FREQUENCY, UPLOAD_BUTTON);
+      moveCursor(i_cursor_last, i_cursor);
     }
   }
   else
@@ -207,75 +218,67 @@ void updateParam(uint16_t i, int8_t x)
 
 void upload()
 {
-  
+  uint8_t param;
+  for (uint8_t i = 0; i < N_PARAMS-1; i++) 
+  {
+    Wire.beginTransmission(PARAM_DESTINATION[i]);
+    if (i!= LOAD) {param = params[i];}
+    else {param = (uint8_t) params[i]/10;}
+    Wire.write(param);
+    Wire.endTransmission();
+  }
 }
 ///////////////////// Graphics Helpers /////////////////////
 void nextState() 
 {
-  i_cursor = 0;
   state++;
   tft.fillScreen(COLORS[BACKGROUND]);
+  for (uint8_t i = 0; i < 4; i++){btns[i].erase();}
+  btns[state-1].select();
   switch(state) 
   {
     case USER_INPUT:
-      moveCursor(0, 0);
-      uploadButton.setTFT(tft);
-    break;
-    case UPLOAD:
-      startButton.setTFT(tft);
-      startButton.select();
-      startButton.draw();
+      i_cursor = 0;
+      moveCursor(i_cursor, i_cursor);
     break;
     case RUN_TEST:
       t_start = millis();
-      stopButton.setTFT(tft);
-      stopButton.select();
-      stopButton.draw();
-    break;
-    case COMPLETE:
-      restartButton.setTFT(tft);
-      restartButton.select();
-      restartButton.draw();
     break;
   }
+  btns[state-1].draw();
 }
 
 void printProgressBar()
 {
   const int16_t y = MARGIN+(3)*ROW_HEIGHT;
-  const uint16_t color0 = HX8357_WHITE;
-  const uint16_t color1 = HX8357_GREEN;
-  const uint16_t w0 = WIDTH-2*MARGIN; 
+  const uint16_t f_0 = HX8357_WHITE;
+  const uint16_t f_1 = HX8357_GREEN;
+  const uint16_t w0 = WIDTH-10*MARGIN; 
   const uint16_t h = ROW_HEIGHT;
+  const uint16_t r = 10;
   const int16_t x = (WIDTH-w0)/2;
   float del_t = get_del_t(t_start);
   float percent = del_t/(params[HOURS]*10000.f);
   const uint16_t w1 = w0*percent;
-
-  if (w1 < w0) 
-  {
-    tft.drawRoundRect(x, y, w0, h, 5, color0);
-    tft.fillRoundRect(x, y, w1, h, 5, color1);
-  }
-  else 
-  {
-    nextState();
-  }
+  tft.drawRoundRect(x, y, w0, h, r, f_0);
+  if (w1 < w0) {tft.fillRoundRect(x, y, w1, h, r, f_1);}
+  else {nextState();}
 }
 
 void moveCursor(uint16_t p0, uint16_t p1) 
 {
   String label;
-  int x = MARGIN + COL_WIDTHS[0];
-  int y;
+  uint16_t x = MARGIN + COL_WIDTHS[0];
+  uint16_t y;
+  
   // erase last cursor
+  btns[BTN_UPLOAD].deselect();
   if (p0 != UPLOAD_BUTTON)
   {
     label = labels[p0][VALUE]; 
     y = MARGIN + (p0+1)*ROW_HEIGHT;
     erase("000.0", x, y, S_TEXT[LABELS]);
   }
-  else {uploadButton.deselect();}
   
   // print next cursor
   if (p1 != UPLOAD_BUTTON) 
@@ -285,7 +288,7 @@ void moveCursor(uint16_t p0, uint16_t p1)
     erase(label, x, y, S_TEXT[OPTIONS]);
     myPrint(label, x, y, S_TEXT[LABELS], COLORS[TEXT], false);
   }
-  else {uploadButton.select();}
+  else {btns[BTN_UPLOAD].select();}
   
   state_cursor = true;
 }
@@ -361,10 +364,10 @@ unsigned long get_del_t(unsigned long t0)
   return t-t0;
 }
 
-uint16_t wrap(int16_t x, int16_t x0, int16_t x1) 
+uint16_t wrap(int16_t x, int16_t X0, int16_t X1) 
 {
-  if (x > x1) {return x0;}
-  else if (x < x0) {return x1;}
+  if (x > X1) {return X0;}
+  else if (x < X0) {return X1;}
   return x;
 }
 

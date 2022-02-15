@@ -13,6 +13,7 @@ const uint64_t BAUD_RATE = 230400;            // rate of communications over ser
 enum {USER_INPUT, BOOT, RUN_TEST, STOP};      // machine states
 enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
+const uint8_t ADDRESS = 10;                   // i2c address
 
 mcp2515_can CAN(SPI_CS_PIN);
 CubeMarsAK motors[NUM_MOTORS];
@@ -26,7 +27,7 @@ CubeMarsAK motors[NUM_MOTORS];
 
 bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
-float days = 0.0f, hours = 4.0f, mins = 0.0f;          // easy duration set up 
+float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
@@ -39,7 +40,7 @@ void setup()
 {
   mySerialBegin();
   setupMotors();
-  //Wire.begin();
+  Wire.begin(ADDRESS);
 }
 
 void setupMotors() 

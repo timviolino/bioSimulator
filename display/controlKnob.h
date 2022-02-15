@@ -9,12 +9,10 @@
 class controlKnob {
   
   private:
-    const byte PIN_MSB;
-    const byte PIN_LSB;
-    const byte PIN_BUTTON;
+    const byte PIN_MSB, PIN_LSB, PIN_BUTTON;
     int MSB0, MSB1, LSB0, LSB1;
-    unsigned long t1, del_t;
-    unsigned long t0 = 0;
+    uint64_t t1, del_t;
+    uint64_t t0 = 0;
     bool btn0 = HIGH;
     bool btn1;
     bool isPushed = false;
