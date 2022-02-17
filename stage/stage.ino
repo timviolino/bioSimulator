@@ -7,7 +7,7 @@
 
 ////////////////////////////// Global Constant Defintions //////////////////////////////
 #define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
-#define SPI_CS_PIN 9                          // attach to arduino pin d4
+#define SPI_CS_PIN 10                         // attach to arduino pin d4
 #define NUM_MOTORS 3                          // number of motors 
 const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
 enum {USER_INPUT, BOOT, RUN_TEST, COMPLETE};  // machine states
@@ -27,7 +27,7 @@ CubeMarsAK motors[NUM_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {true, false, false};                 // which motors are powered, id needs to be > 2
+bool powered[3] = {false, true, false};                 // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
