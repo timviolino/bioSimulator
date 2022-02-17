@@ -16,7 +16,7 @@ void LinearActuator::setSpeed(int8_t v)
 
 void LinearActuator::retract()
 {
-  setSpeed(-90);
+  setSpeed(-180);
   delay(T_RETRACT);
   setSpeed(0);
 }

@@ -9,8 +9,6 @@
 
 ///////////////////// Constant Value Definitions /////////////////////
 #define TFT_RST -1
-#define RX 0
-#define TX 1
 #define KNOB_MSB 2
 #define KNOB_LSB 3
 #define KNOB_BUTTON 4
@@ -23,8 +21,10 @@ enum {FREQUENCY, STROKE, LOAD, HOURS, UPLOAD_BUTTON};                 // indices
 enum {BOOT, USER_INPUT, UPLOAD, RUN_TEST, COMPLETE};                  // indices of machine states
 enum {BTN_UPLOAD, BTN_START, BTN_STOP, BTN_RESTART};                  // indices of btn objects
 enum {UI, STAGE, LOAD_HEAD};                                          // indices of arduino addresses
-const uint8_t INO_ADRS[3] = {9, 10, 11};
-const uint8_t PARAM_DESTINATION[3] = {INO_ADRS[STAGE], INO_ADRS[STAGE], INO_ADRS[LOAD_HEAD]};
+enum {START, STOP};
+const uint8_t INO_ADDYS[3] = {9, 10, 11};
+const uint8_t CODES[2] = {245, 255};   // i2c codes
+const uint8_t PARAM_DESTINATION[3] = {INO_ADDYS[STAGE], INO_ADDYS[STAGE], INO_ADDYS[LOAD_HEAD]};
 const uint8_t N_PARAMS = 4;
 const uint8_t N_BTNS = 4;
 const uint8_t N_OPTIONS = 5;
@@ -78,7 +78,7 @@ void setup()
   initTFT();
   initControlKnob();
   initBtns();
-  Wire.begin();
+  Wire.begin(9);
 }
 
 void loop() 
@@ -116,7 +116,8 @@ void loop()
   }
 }
 
-void initBoot() {
+void initBoot() 
+{
   tft.fillScreen(COLORS[BACKGROUND]);
   title = new Label(tft, "bioSimulator", MARGIN + 2*ROW_HEIGHT, S_TEXT[TITLES]);
   title -> draw(true);
@@ -161,6 +162,7 @@ void push()
       if (i_cursor == UPLOAD_BUTTON) 
       {
         nextState();
+        uploadParams();
         break;
       }
       else 
@@ -169,16 +171,15 @@ void push()
         moveCursor(i_cursor, i_cursor);
       }
     break;
-    
     case UPLOAD:
       nextState();
+      sendInoSignal(CODES[START]);
     break;
-
     case RUN_TEST:
       state = BOOT;
+      sendInoSignal(CODES[STOP]);
       nextState();
     break;
-
     case COMPLETE:
       state = BOOT;
     break;
@@ -215,19 +216,29 @@ void updateParam(uint16_t i, int8_t x)
   dtostrf(params[i], PARAMS_CHARS[i], 1, labels[i][1]);
 }
 
-
-void upload()
+void uploadParams()
 {
-  uint8_t param;
+  uint8_t param;                                       // stores the param to be transmitted
+  const float factor[3] = {10.0, 10.0, 0.1};           // used to retain decimals when converting to uint8_t
   for (uint8_t i = 0; i < N_PARAMS-1; i++) 
   {
     Wire.beginTransmission(PARAM_DESTINATION[i]);
-    if (i!= LOAD) {param = params[i];}
-    else {param = (uint8_t) params[i]/10;}
+    param = (uint8_t) (params[i]*factor[i]);
     Wire.write(param);
     Wire.endTransmission();
   }
 }
+
+void sendInoSignal(uint8_t code)
+{
+  for(uint8_t i = 0; i < 2; i++)
+  {
+    Wire.beginTransmission(INO_ADDYS[i+1]);
+    Wire.write(code);
+    Wire.endTransmission();
+  }
+}
+
 ///////////////////// Graphics Helpers /////////////////////
 void nextState() 
 {
@@ -244,6 +255,9 @@ void nextState()
     case RUN_TEST:
       t_start = millis();
     break;
+    case COMPLETE:
+      sendInoSignal(CODES[STOP]);
+    break;
   }
   btns[state-1].draw();
 }
@@ -259,9 +273,10 @@ void printProgressBar()
   const int16_t x = (WIDTH-w0)/2;
   float del_t = get_del_t(t_start);
   float percent = del_t/(params[HOURS]*10000.f);
-  const uint16_t w1 = w0*percent;
-  tft.drawRoundRect(x, y, w0, h, r, f_0);
-  if (w1 < w0) {tft.fillRoundRect(x, y, w1, h, r, f_1);}
+  const uint16_t w1 = (w0-r)*percent;
+  tft.drawRoundRect(x, y, w0, h, r, f_0);                           // print border
+  tft.fillRoundRect(x+1, y+1, 2*r, h-2, r, f_1);                    // need this to prevent curves from overlapping
+  if (w1 < w0-r) {tft.fillRoundRect(x+r, y+1, w1, h-2, r, f_1);}  // print and update filler
   else {nextState();}
 }
 

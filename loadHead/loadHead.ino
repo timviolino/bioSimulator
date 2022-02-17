@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 
 ////////////////////////////// Library Imports ///////////////////////////////
 #include <HX711.h>                            // Used for reading load cell amplifier
@@ -6,18 +6,19 @@
 #include "LinearActuator.h"                   // custom linear actuator control class
 
 ////////////////////////////// Constant Value Definitions ///////////////////////////////
-#define CLK 2                                     // connect Arduino pin D2 to HX711 CLK
-#define DAT 3                                     // connect Arduino pin D3 to HX711 DAT 
-#define RPWM 10                                   // connect Arduino pin D10 to IBT-2 pin RPWM
-#define LPWM 11                                   // connect Arduino pin D11 to IBT-2 pin LPWM
-enum {USER_INPUT, BOOT, RUN_TEST, STOP};          // indices used for accessing machine states
-enum {MIN, MAX, RAMP};                            // indices used for accessing physical constants
-const uint8_t ADDY = 11;                          // i2c ADDY
-const uint8_t V[3] = {43, 90, 55};                // start up speed used to prevent linear actuator 'sticking'
-const uint16_t F[2] = {50, 400};                  // load capacities of system [N]
-//const uint32_t t_RETRACT = 6000;                // time for linear actuator to retract at beginning of test
-const int64_t LC_FACTOR = -7050;                  // factor used to calibrate laod cell with known weight
-const uint64_t BAUD_RATE = 9600;                  // baud rate used for serial communications with IDE
+#define CLK 2                               // connect Arduino pin D2 to HX711 CLK
+#define DAT 3                               // connect Arduino pin D3 to HX711 DAT 
+#define RPWM 10                             // connect Arduino pin D10 to IBT-2 pin RPWM
+#define LPWM 11                             // connect Arduino pin D11 to IBT-2 pin LPWM
+enum {USER_INPUT, BOOT, RUN_TEST, SHUT_DOWN}; // indices used for accessing machine states
+enum {MIN, MAX, RAMP};                      // indices used for accessing physical constants
+enum {START, STOP};                         // indices used for i2c codes
+const uint8_t ADDY = 11;                    // i2c ADDY
+const uint8_t CODES[2] = {245, 255};        // i2c codes
+const uint8_t V[3] = {43, 90, 55};          // start up speed used to prevent linear actuator 'sticking'
+const uint16_t F[2] = {50, 400};            // load capacities of system [N]
+const int64_t LC_FACTOR = -7050;            // factor used to calibrate laod cell with known weight
+const uint64_t BAUD_RATE = 115200;          // baud rate used for serial communications with IDE
 
 ////////////////////////////// Global Variable Declarations ///////////////////////////////
 uint8_t state = USER_INPUT;              // stores the current state of the machine
@@ -39,38 +40,39 @@ void setup() {
 }
 
 void loop() {
+  Serial.print("state: " + String(state) + " ");
   switch(state) {
     case USER_INPUT:
-      #ifdef DEBUG
-      Serial.println("waiting...");
-      #endif
       break;
       
     case BOOT:
       actuator.init();
       initLoadCell();
       initVariables();
-      state = RUN_TEST;
       break;
       
     case RUN_TEST:
       runTest();
       delay(90);
       break;
-      
-    case STOP:
-      state = USER_INPUT;
-      break;
+
+    case SHUT_DOWN:
+      actuator.retract();
   }
+  Serial.println(" ");
 }
 
 //////// Helper Functions ////////
-void receive() {
-  if (state == USER_INPUT) {
-    F_goal = -Wire.read();
+void receive(int b) {
+  uint8_t msg = Wire.read();
+  Serial.println("msg: " + String(msg));
+  if (msg == CODES[STOP]) {state = USER_INPUT;}
+  else if (msg == CODES[START]) {state = RUN_TEST;}
+  else if (state == USER_INPUT) 
+  {
+    F_goal = msg*10;
     state = BOOT;
   }
-  else if (Wire.read() == 1){state = STOP;}
 }
 
 void runTest() {
@@ -81,13 +83,13 @@ void runTest() {
   actuator.setSpeed(0);
 }
 
-volatile float read_F() {
-  volatile float F_read = 0.00f;
+float read_F() {
+  float F_read = 0.00f;
   if (scale.is_ready()) {F_read = 9.81f * scale.get_units(2);}
   
   #ifdef DEBUG
   Serial.print("Load = ");
-  Serial.print(F_read, 2);
+  Serial.println(F_read, 2);
   #endif
   
   return F_read;

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-const uint64_t T_RETRACT = 6000;
+const uint64_t T_RETRACT = 3000;
 
 class LinearActuator
 {

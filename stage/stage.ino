@@ -10,10 +10,12 @@
 #define SPI_CS_PIN 9                          // attach to arduino pin d4
 #define NUM_MOTORS 3                          // number of motors 
 const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
-enum {USER_INPUT, BOOT, RUN_TEST, STOP};      // machine states
+enum {USER_INPUT, BOOT, RUN_TEST, COMPLETE};  // machine states
 enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
-const uint8_t ADDRESS = 10;                   // i2c address
+enum {START, STOP};                           // indices of i2c codes
+const uint8_t ADDY = 10;                      // i2c address
+const uint8_t CODES[2] = {245, 255};          // i2c codes
 
 mcp2515_can CAN(SPI_CS_PIN);
 CubeMarsAK motors[NUM_MOTORS];
@@ -25,7 +27,7 @@ CubeMarsAK motors[NUM_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
+bool powered[3] = {true, false, false};                 // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
 uint8_t state = BOOT;                                   // current machine state 
@@ -34,23 +36,15 @@ uint8_t i_pos = 0;                                      // stores current index 
 uint8_t t_step = 0;                                     // time between steps on wave
 unsigned long t_start;                                  // records the time at which the test starts
 unsigned long t_lastStep = 0;                           // time at which motors were last actuated
+uint8_t i_input = FREQUENCY;                            // index of param for ui upload
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup() 
 {
   mySerialBegin();
   setupMotors();
-  Wire.begin(ADDRESS);
-}
-
-void setupMotors() 
-{
-  for (int i = 0; i < NUM_MOTORS; i++) 
-  {
-    uint8_t id = i+3;
-    motors[i].setID(id);
-    motors[i].setPower(powered[i]);
-  }
+  Wire.begin(ADDY);
+  Wire.onReceive(receive);
 }
 
 void loop() 
@@ -58,22 +52,17 @@ void loop()
   switch (state) 
   {
     case USER_INPUT:
-      //readUserInput();
       break;
-
     case BOOT:
       boot();
       ramp(0, params[FREQUENCY]);
       bootTiming();
       state = RUN_TEST;
       break;
-
     case RUN_TEST:
       oscillate(t_step, 2);
-      checkDuration();
       break;
-
-    case STOP:
+    case COMPLETE:
       ramp(params[FREQUENCY], 0);
       stopTest();
       state = USER_INPUT;
@@ -83,7 +72,16 @@ void loop()
 
 void boot() 
 {
-  checkCANShield();
+  while (CAN_OK != CAN.begin(CAN_1000KBPS))
+  {
+  #ifdef DEBUG 
+  Serial.println("CAN BUS Shield init fail"); 
+  #endif
+    delay(100);
+  }
+  #ifdef DEBUG 
+  Serial.println("CAN BUS Shield init ok!"); 
+  #endif
   for (int i = 0; i < 3; i++) {motors[i].boot();}
   conversionFactor = degToRad(params[STROKE]);
 }
@@ -105,12 +103,6 @@ unsigned long get_t_step(float frequency, uint16_t n_steps) {
     t_step = int(1000.0f/stepsPerSec);              // ms per step converted to int
   }
   return t_step;
-}
-
-void checkDuration() 
-{
-  unsigned long del_t = get_del_t(t_start);             // record total elapsed time
-  if (del_t > params[DURATION]) {state = STOP;}         // if elapsed time is greater than test duration: stop test
 }
 
 void oscillate(unsigned long t_step, uint8_t i_step) 
@@ -164,28 +156,35 @@ float getPosition(uint8_t i_step)
   return p;
 }
 
-void checkCANShield() 
-{
-  while (CAN_OK != CAN.begin(CAN_1000KBPS))              // init can bus : baudrate = 1MHz
+void receive(int b) {
+  uint8_t msg = Wire.read();
+  if (msg == CODES[STOP]) 
   {
-#ifdef DEBUG
-    Serial.println("CAN BUS Shield init fail");
-    Serial.println(" Init CAN BUS Shield again");
-#endif
-    delay(100);
+    state = COMPLETE;
+    i_input = FREQUENCY;
   }
-#ifdef DEBUG
-  Serial.println("CAN BUS Shield init ok!");
-#endif
+  else if (msg == CODES[START]) 
+  {
+    state = RUN_TEST;
+    i_input = FREQUENCY;
+  }
+  else if (state == USER_INPUT) 
+  {
+    params[i_input] = msg/10.0f;
+    i_input++;
+    if (i_input > STROKE) {state = BOOT;}
+  }
 }
 
-void sendLoad() 
+void setupMotors() 
 {
-  Wire.beginTransmission(9);
-  Wire.write(int(params[LOAD]));
-  Wire.endTransmission();
+  for (int i = 0; i < NUM_MOTORS; i++) 
+  {
+    uint8_t id = i+3;
+    motors[i].setID(id);
+    motors[i].setPower(powered[i]);
+  }
 }
-
 //////////////////////////// Generic Helper Functions //////////////////////////////////
 void mySerialBegin() 
 {

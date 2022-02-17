@@ -1,7 +1,7 @@
 #ifndef CUBE_MARS_AK_h_
 #define CUBE_MARS_AK_h_
 
-//#define DEBUG 
+#define DEBUG 
 
 #include <Arduino.h>
 #include <mcp2515_can.h>
