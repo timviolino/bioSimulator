@@ -31,10 +31,9 @@ class CubeMarsAK
 
   public:
     CubeMarsAK();
-    CubeMarsAK(uint8_t id, bool powered);
     void boot();
-    void setID(uint8_t id);
     void setPower(bool powered);
+    void setID(uint8_t id);
     void setPos(float p);
     
 };

@@ -11,13 +11,15 @@ void LinearActuator::setSpeed(int8_t v)
   analogWrite(_LPWM, 0);
   if (v < 0) {analogWrite(_RPWM, abs(v));}    // Retract actuator
   else {analogWrite(_LPWM, abs(v));}          // Extend actuator
-  delay(30);                                 // Minimum travel time
+  delay(30);                                  // Minimum travel time
 }
 
 void LinearActuator::retract()
 {
-  setSpeed(-180);
+  setSpeed(180);
   delay(T_RETRACT);
+  setSpeed(-180);
+  delay(500);
   setSpeed(0);
 }
 

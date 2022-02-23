@@ -1,5 +1,5 @@
 #include "CubeMarsAK.h"
-#define SPI_CS_PIN 9
+#define SPI_CS_PIN 10
 
 
 mcp2515_can CAN1(SPI_CS_PIN);
@@ -15,11 +15,6 @@ enum {ENTER, EXIT, ZERO};
 byte MODES[3] = {0xFC, 0xFD, 0xFE};
 
 CubeMarsAK::CubeMarsAK() {}
-
-CubeMarsAK::CubeMarsAK(uint8_t id, bool powered)
-  : _id(id)
-  , _powered(powered)
-  {}
 
 void CubeMarsAK::boot() {
   if(_powered) 
@@ -40,13 +35,9 @@ void CubeMarsAK::setPos(float p) {
   _unpackReply();
 }
 
-void CubeMarsAK::setID(uint8_t id) {
-  _id = id;
-}
+void CubeMarsAK::setID(uint8_t id) {_id = id;}
 
-void CubeMarsAK::setPower(bool powered) {
-  _powered = powered;
-}
+void CubeMarsAK::setPower(bool powered) {_powered = powered;}
 
 void CubeMarsAK::_setZero() {
   if (CAN_MSGAVAIL == CAN1.checkReceive())

@@ -7,8 +7,8 @@
 
 ////////////////////////////// Global Constant Defintions //////////////////////////////
 #define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
-#define SPI_CS_PIN 10                         // attach to arduino pin d4
-#define NUM_MOTORS 3                          // number of motors 
+#define SPI_CS_PIN 10                         // attach to arduino pin d4 MUST BE 9 FOR UNO SHIELD
+#define N_MOTORS 3                          // number of motors 
 const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
 enum {USER_INPUT, BOOT, RUN_TEST, COMPLETE};  // machine states
 enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
@@ -18,7 +18,7 @@ const uint8_t ADDY = 10;                      // i2c address
 const uint8_t CODES[2] = {245, 255};          // i2c codes
 
 mcp2515_can CAN(SPI_CS_PIN);
-CubeMarsAK motors[NUM_MOTORS];
+CubeMarsAK motors[N_MOTORS];
 
 ////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
 // The expected test parameters are as follows:
@@ -27,10 +27,10 @@ CubeMarsAK motors[NUM_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {false, true, false};                 // which motors are powered, id needs to be > 2
+bool powered[3] = {false, false, true};                   // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
-uint8_t state = BOOT;                                   // current machine state 
+uint8_t state = USER_INPUT;                             // current machine state 
 float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
 uint8_t t_step = 0;                                     // time between steps on wave
@@ -65,6 +65,7 @@ void loop()
     case COMPLETE:
       ramp(params[FREQUENCY], 0);
       stopTest();
+      setupMotors();
       state = USER_INPUT;
       break;
   }
@@ -82,7 +83,7 @@ void boot()
   #ifdef DEBUG 
   Serial.println("CAN BUS Shield init ok!"); 
   #endif
-  for (int i = 0; i < 3; i++) {motors[i].boot();}
+  for (int i = 0; i < N_MOTORS; i++) {motors[i].boot();}
   conversionFactor = degToRad(params[STROKE]);
 }
 
@@ -139,8 +140,8 @@ void ramp(float f0, float f1)
 }
 
 void stopTest() 
-{
-  for (int i = 0; i < 3; i++) 
+{ 
+  for (int i = 0; i < N_MOTORS; i++) 
   {
     motors[i].setPower(false);
     motors[i].boot();
@@ -165,20 +166,20 @@ void receive(int b) {
   }
   else if (msg == CODES[START]) 
   {
-    state = RUN_TEST;
+    state = BOOT;
     i_input = FREQUENCY;
   }
   else if (state == USER_INPUT) 
   {
     params[i_input] = msg/10.0f;
     i_input++;
-    if (i_input > STROKE) {state = BOOT;}
+    if (i_input > STROKE) {i_input = 0;}
   }
 }
 
 void setupMotors() 
 {
-  for (int i = 0; i < NUM_MOTORS; i++) 
+  for (int i = 0; i < N_MOTORS; i++) 
   {
     uint8_t id = i+3;
     motors[i].setID(id);

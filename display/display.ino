@@ -71,6 +71,7 @@ Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 controlKnob knob = controlKnob(KNOB_MSB, KNOB_LSB, KNOB_BUTTON);
 Button btns[4];
 Label *title;
+void(* resetFunc) (void) = 0;
 
 void setup() 
 {
@@ -125,6 +126,7 @@ void initBoot()
 
 void initTFT() 
 {
+  delay(100);
   tft.begin();
   tft.setRotation(2);
   tft.setTextWrap(false);
@@ -181,7 +183,7 @@ void push()
       nextState();
     break;
     case COMPLETE:
-      state = BOOT;
+      resetFunc();
     break;
   }
 }
@@ -236,6 +238,7 @@ void sendInoSignal(uint8_t code)
     Wire.beginTransmission(INO_ADDYS[i+1]);
     Wire.write(code);
     Wire.endTransmission();
+    delay(50);
   }
 }
 
@@ -272,11 +275,11 @@ void printProgressBar()
   const uint16_t r = 10;
   const int16_t x = (WIDTH-w0)/2;
   float del_t = get_del_t(t_start);
-  float percent = del_t/(params[HOURS]*10000.f);
+  float percent = del_t/(params[HOURS]*3600000.f);
   const uint16_t w1 = (w0-r)*percent;
   tft.drawRoundRect(x, y, w0, h, r, f_0);                           // print border
   tft.fillRoundRect(x+1, y+1, 2*r, h-2, r, f_1);                    // need this to prevent curves from overlapping
-  if (w1 < w0-r) {tft.fillRoundRect(x+r, y+1, w1, h-2, r, f_1);}  // print and update filler
+  if (w1 < w0-r) {tft.fillRoundRect(x+r, y+1, w1, h-2, r, f_1);}    // print and update filler
   else {nextState();}
 }
 
@@ -370,7 +373,6 @@ void myPrint(String label, int16_t x, int16_t y, uint16_t textSize, uint16_t tex
   tft.setCursor(x, y);
   tft.println(label);
 }
-
 
 //////////////////////////// Generic Helper Functions ////////////////////////////
 unsigned long get_del_t(unsigned long t0) 

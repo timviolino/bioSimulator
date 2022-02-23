@@ -15,7 +15,7 @@ enum {MIN, MAX, RAMP};                      // indices used for accessing physic
 enum {START, STOP};                         // indices used for i2c codes
 const uint8_t ADDY = 11;                    // i2c ADDY
 const uint8_t CODES[2] = {245, 255};        // i2c codes
-const uint8_t V[3] = {43, 90, 55};          // start up speed used to prevent linear actuator 'sticking'
+const uint8_t V[3] = {47, 90, 55};          // start up speed used to prevent linear actuator 'sticking'
 const uint16_t F[2] = {50, 400};            // load capacities of system [N]
 const int64_t LC_FACTOR = -7050;            // factor used to calibrate laod cell with known weight
 const uint64_t BAUD_RATE = 115200;          // baud rate used for serial communications with IDE
@@ -40,7 +40,6 @@ void setup() {
 }
 
 void loop() {
-  Serial.print("state: " + String(state) + " ");
   switch(state) {
     case USER_INPUT:
       break;
@@ -49,30 +48,28 @@ void loop() {
       actuator.init();
       initLoadCell();
       initVariables();
+      state = RUN_TEST;
       break;
       
     case RUN_TEST:
       runTest();
+      printVariables();
       delay(90);
       break;
 
     case SHUT_DOWN:
       actuator.retract();
+      state = USER_INPUT;
+      break;
   }
-  Serial.println(" ");
 }
 
 //////// Helper Functions ////////
 void receive(int b) {
   uint8_t msg = Wire.read();
-  Serial.println("msg: " + String(msg));
-  if (msg == CODES[STOP]) {state = USER_INPUT;}
-  else if (msg == CODES[START]) {state = RUN_TEST;}
-  else if (state == USER_INPUT) 
-  {
-    F_goal = msg*10;
-    state = BOOT;
-  }
+  if (msg == CODES[STOP]) {state = SHUT_DOWN;}
+  else if (msg == CODES[START]) {state = BOOT;}
+  else if (state == USER_INPUT) {F_goal = msg*10;}
 }
 
 void runTest() {
@@ -89,7 +86,7 @@ float read_F() {
   
   #ifdef DEBUG
   Serial.print("Load = ");
-  Serial.println(F_read, 2);
+  Serial.print(F_read, 2);
   #endif
   
   return F_read;
@@ -126,9 +123,9 @@ void initLoadCell() {
 void printVariables()
 {
   #ifdef DEBUG
-    Serial.print("Goal Load = " + String(F_goal));
-    Serial.println(" | Test Speed = " + String(v_run) + " | F_range = " + String(F_range));
-    Serial.println("");       // clear serial com line
+    Serial.print(" | Goal Load = " + String(F_goal));
+    Serial.print(" | Test Speed = " + String(v_run) + " | F_range = " + String(F_range));
+    Serial.println("");       // clear line
   #endif
 }
 
