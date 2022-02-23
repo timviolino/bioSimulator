@@ -27,7 +27,7 @@ CubeMarsAK motors[N_MOTORS];
 // load in N {10, 400}
 // duration in ms
 
-bool powered[3] = {false, false, true};                   // which motors are powered, id needs to be > 2
+bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
 volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
 uint8_t state = USER_INPUT;                             // current machine state 
