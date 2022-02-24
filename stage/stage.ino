@@ -122,13 +122,13 @@ void ramp(float f0, float f1)
   float f = f0;
   const float dir = copysign(1, f1-f0);
   const float f_step = 0.1f;
-  const unsigned long t_fstep = 250;
-  unsigned long t_last_fstep = millis();
-  unsigned long t_step;
+  const uint16_t t_fstep = 250;
+  uint64_t t_last_fstep = millis();
+  uint64_t t_step;
   const uint8_t i_step = 4;
   while (dir*(f1-f) > f_step)
   {
-    unsigned long del_t = get_del_t(t_last_fstep);
+    uint64_t del_t = get_del_t(t_last_fstep);
     t_step = get_t_step(f, STEPS/i_step)+1;
     oscillate(t_step, i_step);
     if (del_t > t_fstep) 
@@ -150,11 +150,14 @@ void stopTest()
 
 float getPosition(uint8_t i_step) 
 {
-  float p = float(pgm_read_word_near(waveformsTable + i_pos));  // read current value out from table
-  p = (p - 2047.5) * conversionFactor / 2047.5;                 // convert to "motor radians"
-  i_pos += i_step;                                              // increment position index
-  if (i_pos >= STEPS) {i_pos = 0;}                              // reset index at end of array
-  return p;
+  int16_t p_int = float(pgm_read_word_near(waveformsTable + i_pos));   // read current value out from table
+  uint8_t i_new = i_pos + i_step;                                      // save temporary value for next logic statement
+  i_pos = (i_new >= 120) ? 0 : i_new;                                  // if i+step >= 120, i = 0; else i += step
+  
+  p_int -= (WAVE_AMP/2+1);                                             // zero allign position. +1 for zero indexing
+  float p_float = p_int/float(WAVE_AMP/2);                             // normalize to -1, +1 amplitude
+  p_float *= conversionFactor;                                         // convert to motor radians
+  return p_float;
 }
 
 void receive(int b) {

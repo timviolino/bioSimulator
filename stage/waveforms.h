@@ -2,6 +2,7 @@
 #define _waveforms_h_
 
 #define STEPS 120
+const uint16_t WAVE_AMP = pow(2, 12);
 
 //Include PROGMEM to store data in flash memory instead of SRAM
 const int waveformsTable[STEPS] PROGMEM = {
