@@ -54,13 +54,14 @@ void loop()
     case USER_INPUT:
       break;
     case BOOT:
+      initCANShield();
       boot();
       ramp(0, params[FREQUENCY]);
       bootTiming();
       state = RUN_TEST;
       break;
     case RUN_TEST:
-      oscillate(t_step, 2);
+      oscillate(t_step, 4);
       break;
     case COMPLETE:
       ramp(params[FREQUENCY], 0);
@@ -71,7 +72,7 @@ void loop()
   }
 }
 
-void boot() 
+void initCANShield() 
 {
   while (CAN_OK != CAN.begin(CAN_1000KBPS))
   {
@@ -83,6 +84,10 @@ void boot()
   #ifdef DEBUG 
   Serial.println("CAN BUS Shield init ok!"); 
   #endif
+}
+
+void boot() 
+{
   for (int i = 0; i < N_MOTORS; i++) {motors[i].boot();}
   conversionFactor = degToRad(params[STROKE]);
 }
@@ -153,8 +158,7 @@ float getPosition(uint8_t i_step)
   int16_t p_int = float(pgm_read_word_near(waveformsTable + i_pos));   // read current value out from table
   uint8_t i_new = i_pos + i_step;                                      // save temporary value for next logic statement
   i_pos = (i_new >= 120) ? 0 : i_new;                                  // if i+step >= 120, i = 0; else i += step
-  
-  p_int -= (WAVE_AMP/2+1);                                             // zero allign position. +1 for zero indexing
+  p_int -= (WAVE_AMP/2-1);                                             // zero allign position. -u1 for zero indexing
   float p_float = p_int/float(WAVE_AMP/2);                             // normalize to -1, +1 amplitude
   p_float *= conversionFactor;                                         // convert to motor radians
   return p_float;
