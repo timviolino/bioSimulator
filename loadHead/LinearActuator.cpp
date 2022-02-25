@@ -14,17 +14,23 @@ void LinearActuator::setSpeed(int8_t v)
   delay(30);                                  // Minimum travel time
 }
 
-void LinearActuator::retract()
+void LinearActuator::retract(uint64_t t)
 {
   setSpeed(180);
-  delay(T_RETRACT);
+  delay(t);
+  setSpeed(0);
+}
+
+void LinearActuator::extend(uint64_t t)
+{
   setSpeed(-180);
-  delay(500);
+  delay(t);
   setSpeed(0);
 }
 
 void LinearActuator::init() {
   pinMode(_RPWM, OUTPUT);        // configure pin 10 as an output
   pinMode(_LPWM, OUTPUT);        // configure pin 11 as an output
-  retract();
+  retract(2000);
+  extend(1000);
 }

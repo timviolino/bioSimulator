@@ -3,8 +3,6 @@
 
 #include <Arduino.h>
 
-const uint64_t T_RETRACT = 2000;
-
 class LinearActuator
 {
   private:
@@ -13,7 +11,8 @@ class LinearActuator
   public:
     LinearActuator(uint8_t RPWM, uint8_t LPWM);
     void setSpeed(int8_t v);
-    void retract();
+    void retract(uint64_t);
+    void extend(uint64_t);
     void init();
 };
 

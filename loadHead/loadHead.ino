@@ -11,11 +11,11 @@
 #define RPWM 10                             // connect Arduino pin D10 to IBT-2 pin RPWM
 #define LPWM 11                             // connect Arduino pin D11 to IBT-2 pin LPWM
 enum {USER_INPUT, BOOT, RUN_TEST, SHUT_DOWN}; // indices used for accessing machine states
-enum {MIN, MAX, RAMP};                      // indices used for accessing physical constants
+enum {MIN, MAX};                              // indices used for accessing physical constants
 enum {START, STOP};                         // indices used for i2c codes
 const uint8_t ADDY = 11;                    // i2c ADDY
 const uint8_t CODES[2] = {245, 255};        // i2c codes
-const uint8_t V[3] = {47, 90, 55};          // start up speed used to prevent linear actuator 'sticking'
+const uint8_t V[2] = {52, 100};             // start up speed used to prevent linear actuator 'sticking'
 const uint16_t F[2] = {50, 400};            // load capacities of system [N]
 const int64_t LC_FACTOR = -7050;            // factor used to calibrate laod cell with known weight
 const uint64_t BAUD_RATE = 115200;          // baud rate used for serial communications with IDE
@@ -58,7 +58,7 @@ void loop() {
       break;
 
     case SHUT_DOWN:
-      actuator.retract();
+      actuator.retract(3000);
       state = USER_INPUT;
       break;
   }

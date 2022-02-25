@@ -8,33 +8,33 @@
 ////////////////////////////// Global Constant Defintions //////////////////////////////
 #define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
 #define SPI_CS_PIN 10                         // attach to arduino pin d4 MUST BE 9 FOR UNO SHIELD
-#define N_MOTORS 3                          // number of motors 
-const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
 enum {USER_INPUT, BOOT, RUN_TEST, COMPLETE};  // machine states
-enum {FREQUENCY, STROKE, LOAD, DURATION};     // indices of parameters
+enum {FREQUENCY, STROKE};                     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
 enum {START, STOP};                           // indices of i2c codes
+const uint8_t N_MTR = 3;                      // number of motors
 const uint8_t ADDY = 10;                      // i2c address
 const uint8_t CODES[2] = {245, 255};          // i2c codes
+const uint8_t I_STEP = 4;                     // step size taken through sine wave
+const uint8_t t_FSTEP = 250;                  // time per step of ramp
+const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus 
+const float F_STEP = 0.1f;                    // step at which the frequency is changed
 
 mcp2515_can CAN(SPI_CS_PIN);
-CubeMarsAK motors[N_MOTORS];
+CubeMarsAK motors[N_MTR];
 
 ////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
 // The expected test parameters are as follows:
 // frequency in Hz {0.5, 5} 
 // stroke in deg {1, 7.5} 
-// load in N {10, 400}
-// duration in ms
 
 bool powered[3] = {true, true, true};                   // which motors are powered, id needs to be > 2
-volatile float params[4] = {5.0f, 2.0f, 10.0f, 0.0f};   // stores parameters for duration of test                                                         
+volatile float params[2] = {5.0f, 2.0f};                // stores parameters for duration of test                                                         
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up 
 uint8_t state = USER_INPUT;                             // current machine state 
-float conversionFactor = 0.0f;                          // motor input equivalent to user specified deg's of rotation
+float k_rad = 0.0f;                                     // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
 uint8_t t_step = 0;                                     // time between steps on wave
-unsigned long t_start;                                  // records the time at which the test starts
 unsigned long t_lastStep = 0;                           // time at which motors were last actuated
 uint8_t i_input = FREQUENCY;                            // index of param for ui upload
 
@@ -61,10 +61,11 @@ void loop()
       state = RUN_TEST;
       break;
     case RUN_TEST:
-      oscillate(t_step, 4);
+      oscillate(t_step, I_STEP);
       break;
     case COMPLETE:
       ramp(params[FREQUENCY], 0);
+      center();
       stopTest();
       setupMotors();
       state = USER_INPUT;
@@ -88,37 +89,38 @@ void initCANShield()
 
 void boot() 
 {
-  for (int i = 0; i < N_MOTORS; i++) {motors[i].boot();}
-  conversionFactor = degToRad(params[STROKE]);
+  for (int i = 0; i < N_MTR; i++) {motors[i].boot();}
+  k_rad = degToRad(params[STROKE]);
 }
 
 void bootTiming() 
 {
-  params[DURATION] = getMillis(days, hours, mins);
-  t_step = get_t_step(params[FREQUENCY], STEPS/2);
-  t_start = millis();
-  t_lastStep = t_start;
+  t_step = get_t_step(params[FREQUENCY], STEPS/I_STEP);
+  t_lastStep = millis();
 }
 
-unsigned long get_t_step(float frequency, uint16_t n_steps) {
-  float stepsPerSec;
-  unsigned long t_step = 1000;
-  if(frequency != 0)
+uint64_t get_t_step(float f, uint16_t n) {
+  float f_step;
+  uint64_t t_step = 1000;
+  if(f != 0)
   {
-    stepsPerSec = float(n_steps * frequency);       // f*120 discrete steps per second
-    t_step = int(1000.0f/stepsPerSec);              // ms per step converted to int
+    f_step = n * f;                         // [step/s]
+    t_step = int(1000.0f/f_step);           // [ms/step], int
   }
   return t_step;
 }
 
 void oscillate(unsigned long t_step, uint8_t i_step) 
 {
-  unsigned long del_t = get_del_t(t_lastStep);           // record time since last step
+  uint8_t i, i_new;
+  uint64_t del_t = get_del_t(t_lastStep);                // record time since last step
   if (del_t > t_step)                                    // check if time between steps has elapsed
   {               
     t_lastStep += del_t;                                 // update time of last step                            
-    float p = getPosition(i_step);                       // record position on sine wave
-    for (int i = 0; i < 3; i++) {motors[i].setPos(p);}   // iterate through motors
+    float p = getPosition(i_pos);                        // record position on sine wave
+    i_new = i_pos + i_step;                              // save temporary value for next logic statement
+    i_pos = (i_new >= 120) ? 0 : i_new;                  // if i+step >= 120, i = 0; else i += step
+    for (i = 0; i < N_MTR; i++) {motors[i].setPos(p);}   // iterate through motors
   }
 }
 
@@ -126,41 +128,42 @@ void ramp(float f0, float f1)
 {
   float f = f0;
   const float dir = copysign(1, f1-f0);
-  const float f_step = 0.1f;
-  const uint16_t t_fstep = 250;
-  uint64_t t_last_fstep = millis();
-  uint64_t t_step;
-  const uint8_t i_step = 4;
-  while (dir*(f1-f) > f_step)
+  uint64_t t0, del_t; 
+  t0 = millis();
+  while (dir*(f1-f) > F_STEP)
   {
-    uint64_t del_t = get_del_t(t_last_fstep);
-    t_step = get_t_step(f, STEPS/i_step)+1;
-    oscillate(t_step, i_step);
-    if (del_t > t_fstep) 
+    del_t = get_del_t(t0);
+    t_step = get_t_step(f, STEPS/I_STEP)+1;
+    oscillate(t_step, I_STEP);
+    if (del_t > t_FSTEP) 
     {
-      f += dir*f_step;
-      t_last_fstep += del_t;
+      f += dir*F_STEP;
+      t0 += del_t;
     }
   }
 }
 
+void center()
+{
+  t_step = get_t_step(5*F_STEP, STEPS)+1;       // set time step for centering
+  while (i_pos != 0) {oscillate(t_step, 1);}    // rotate untill theta = 0
+}
+
 void stopTest() 
 { 
-  for (int i = 0; i < N_MOTORS; i++) 
+  for (int i = 0; i < N_MTR; i++) 
   {
     motors[i].setPower(false);
     motors[i].boot();
   }
 }
 
-float getPosition(uint8_t i_step) 
+float getPosition(uint8_t i_pos) 
 {
   int16_t p_int = float(pgm_read_word_near(waveformsTable + i_pos));   // read current value out from table
-  uint8_t i_new = i_pos + i_step;                                      // save temporary value for next logic statement
-  i_pos = (i_new >= 120) ? 0 : i_new;                                  // if i+step >= 120, i = 0; else i += step
   p_int -= (WAVE_AMP/2-1);                                             // zero allign position. -u1 for zero indexing
   float p_float = p_int/float(WAVE_AMP/2);                             // normalize to -1, +1 amplitude
-  p_float *= conversionFactor;                                         // convert to motor radians
+  p_float *= k_rad;                                                    // convert to motor radians
   return p_float;
 }
 
@@ -186,7 +189,7 @@ void receive(int b) {
 
 void setupMotors() 
 {
-  for (int i = 0; i < N_MOTORS; i++) 
+  for (int i = 0; i < N_MTR; i++) 
   {
     uint8_t id = i+3;
     motors[i].setID(id);
