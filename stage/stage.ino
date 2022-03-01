@@ -54,11 +54,11 @@ void loop()
     case USER_INPUT:
       break;
     case BOOT:
+      state = RUN_TEST;               // NOTE - this needs to be at beginning else it will override STOP signal from display
       initCANShield();
       boot();
       ramp(0, params[FREQUENCY]);
       bootTiming();
-      state = RUN_TEST;
       break;
     case RUN_TEST:
       oscillate(t_step, I_STEP);
@@ -146,7 +146,7 @@ void ramp(float f0, float f1)
 void center()
 {
   t_step = get_t_step(5*F_STEP, STEPS)+1;       // set time step for centering
-  while (i_pos != 0) {oscillate(t_step, 1);}    // rotate untill theta = 0
+  while (i_pos != 1) {oscillate(t_step, 1);}    // rotate until theta = 0
 }
 
 void stopTest() 

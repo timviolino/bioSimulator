@@ -5,32 +5,25 @@ LinearActuator::LinearActuator(uint8_t RPWM, uint8_t LPWM)
   , _LPWM(LPWM)
   {}
 
-void LinearActuator::setSpeed(int8_t v)
+void LinearActuator::setSpeed(uint8_t v, bool sign)
 {
-  analogWrite(_RPWM, 0);
-  analogWrite(_LPWM, 0);
-  if (v < 0) {analogWrite(_RPWM, abs(v));}    // Retract actuator
-  else {analogWrite(_LPWM, abs(v));}          // Extend actuator
-  delay(30);                                  // Minimum travel time
+  const uint8_t pinHI = (sign) ? _RPWM : _LPWM;             // set _RPWM HI if negative
+  const uint8_t pinLO = (pinHI == _RPWM) ? _LPWM : _RPWM;   // set opposite LO
+  analogWrite(pinHI, v);                      
+  analogWrite(pinLO, 0);                      
 }
 
-void LinearActuator::retract(uint64_t t)
+void LinearActuator::step(int16_t v, uint16_t t)
 {
-  setSpeed(180);
-  delay(t);
-  setSpeed(0);
-}
-
-void LinearActuator::extend(uint64_t t)
-{
-  setSpeed(-180);
-  delay(t);
-  setSpeed(0);
+  const bool sign = signbit(v);     // save 1 if neg, 0 if pos
+  setSpeed(abs(v), sign);           // set speed [0-255], retract if 1, extend if 0
+  delay(t);                         // delay in millis [0-65536]
+  setSpeed(0, sign);                // set speed to 0
 }
 
 void LinearActuator::init() {
   pinMode(_RPWM, OUTPUT);        // configure pin 10 as an output
   pinMode(_LPWM, OUTPUT);        // configure pin 11 as an output
-  retract(2000);
-  extend(1000);
+  step(-80, 1000);               // retract for 2 sec
+  step(80, 900);                 // extend for 1 sec
 }

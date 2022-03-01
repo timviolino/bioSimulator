@@ -10,9 +10,8 @@ class LinearActuator
     
   public:
     LinearActuator(uint8_t RPWM, uint8_t LPWM);
-    void setSpeed(int8_t v);
-    void retract(uint64_t);
-    void extend(uint64_t);
+    void setSpeed(uint8_t, bool);
+    void step(int16_t v, uint16_t t);           // v < 0 => RETRACT, v > 0 => EXTEND, t in ms
     void init();
 };
 
