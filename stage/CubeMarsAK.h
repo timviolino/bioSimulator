@@ -1,13 +1,11 @@
 #ifndef CUBE_MARS_AK_h_
 #define CUBE_MARS_AK_h_
 
-//#define DEBUG 
-
 #include <Arduino.h>
 #include <mcp2515_can.h>
 
 #define BUF_LENGTH 8
-#define CMDS_LENGTH 5
+#define N_CMDS 5
 
 
 class CubeMarsAK
@@ -15,28 +13,29 @@ class CubeMarsAK
   private:
     // Variables
     uint8_t _id;
-    bool _powered;
     float _zero;
     byte _buf[BUF_LENGTH];
-    float _cmds[CMDS_LENGTH];
+    float _cmds[N_CMDS];
+    unsigned int _reads[N_CMDS-2] = {0, 0, 0};
 
     // Functions
-    void _setZero();
     void _packCmds();
     void _unpackReply();
-    void _setMotorMode(byte mode);
-    float _uint_to_float(unsigned int x_int, float x_min, float x_max, int bits);
-    unsigned int _float_to_uint(float x, float x_min, float x_max, int bits);
+    void _setMode(byte mode);
+    float _uint_to_float(unsigned int, float, float, float);
+    unsigned int _float_to_uint(float, float, float, float);
     
-
   public:
+    bool _powered;
+    
     CubeMarsAK();
-    void boot();
+    void init();
     void setPower(bool powered);
     void setID(uint8_t id);
     void setPos(float p);
-    
+    void setKP(float);
+    void setKD(float);
+    float getPos();
 };
-
 
 #endif
