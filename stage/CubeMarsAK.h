@@ -6,6 +6,9 @@
 
 #define BUF_LENGTH 8
 #define N_CMDS 5
+enum {P, V, To, KP, KD};          // cols of CMD
+enum {INIT, MIN, MAX, BIT};       // rows of CMD
+enum {ENTER, EXIT, ZERO};         // indices of MODES
 
 
 class CubeMarsAK
@@ -33,9 +36,8 @@ class CubeMarsAK
     void setPower(bool powered);
     void setID(uint8_t id);
     void setPos(float p);
-    void setKP(float);
-    void setKD(float);
-    float getPos();
+    void set(uint8_t, float);
+    float get(uint8_t);
 };
 
 #endif

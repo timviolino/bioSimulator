@@ -3,9 +3,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_HX8357.h>            // https://github.com/adafruit/Adafruit_HX8357_Library
 #include <Wire.h>                       // Used for networking between Arduinos
-#include "Button.h"
 #include "controlKnob.h"
-#include "Label.h"
+#include "widgets.h"
 
 ///////////////////// Constant Value Definitions /////////////////////
 #define TFT_RST -1
@@ -69,8 +68,8 @@ char labels[N_PARAMS][3][12] =
 ///////////////////// Object Declarations /////////////////////
 Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, TFT_RST);
 controlKnob knob = controlKnob(KNOB_MSB, KNOB_LSB, KNOB_BUTTON);
-Button btns[4];
-Label *title;
+Button btn;
+Label title;
 void(* resetFunc) (void) = 0;
 
 void setup() 
@@ -78,7 +77,8 @@ void setup()
   mySerialBegin();
   initTFT();
   initControlKnob();
-  initBtns();
+  initTitle();
+  initBtn();
   Wire.begin(9);
 }
 
@@ -88,7 +88,7 @@ void loop()
   switch(state) 
   {
     case BOOT:
-      initBoot();
+      title.draw(true);
       delay(1000);
       nextState();
     break;
@@ -97,7 +97,7 @@ void loop()
       updateCursor();
       myPrint("Parameters", 0, MARGIN, S_TEXT[TITLES], COLORS[TEXT], true);
       printOptions();
-      btns[BTN_UPLOAD].draw();
+      btn.draw();
     break;
     
     case UPLOAD:
@@ -117,19 +117,13 @@ void loop()
   }
 }
 
-void initBoot() 
-{
-  tft.fillScreen(COLORS[BACKGROUND]);
-  title = new Label(tft, "bioSimulator", MARGIN + 2*ROW_HEIGHT, S_TEXT[TITLES]);
-  title -> draw(true);
-}
-
 void initTFT() 
 {
   delay(100);
   tft.begin();
   tft.setRotation(2);
   tft.setTextWrap(false);
+  tft.fillScreen(COLORS[BACKGROUND]);
 }
 
 void initControlKnob() 
@@ -139,20 +133,52 @@ void initControlKnob()
    attachInterrupt(1, readKnob, CHANGE);
 }
 
-void initBtns()
+void initTitle()
 {
-  for (uint8_t i = 0; i < N_BTNS; i++) 
+  title.text = "bioSimulator";
+  title.y = MARGIN + 2*ROW_HEIGHT;
+  title.size = S_TEXT[TITLES];
+  title.tft = tft;
+}
+
+void initBtn()
+{
+  btn.tft = tft;
+  btn.y = BTN_Y;
+}
+
+void updateBtn(uint8_t i) 
+{
+  btn.text = BTN_TEXT[i];
+  btn.fill = BTN_FILLS[i];
+}
+
+void nextState() 
+{
+  state++;
+  tft.fillScreen(COLORS[BACKGROUND]);
+  btn.erase();
+  btn.select();
+  updateBtn(state-1);
+  switch(state) 
   {
-    Button& btn = btns[i];
-    btn.tft = tft;
-    btn.text = BTN_TEXT[i];
-    btn.y = BTN_Y;
-    btn.fill = BTN_FILLS[i];
+    case USER_INPUT:
+      i_cursor = 0;
+      moveCursor(i_cursor, i_cursor);
+    break;
+    case RUN_TEST:
+      t_start = millis();
+    break;
+    case COMPLETE:
+      sendInoSignal(CODES[STOP]);
+    break;
   }
+  btn.draw();
 }
 
 ///////////////////// Control Knob Helpers /////////////////////
-void myReadButton() {if(knob.getButtonPush()) {push();}}    // NOTE this is not an interrupt because both external interrupt pins are used for the encoder
+// NOTE this is not an interrupt because both external interrupt pins are used for the encoder
+void myReadButton() {if(knob.getButtonPush()) {push();}}
 
 void readKnob() {i_enc += knob.readEncoder();}
 
@@ -243,28 +269,6 @@ void sendInoSignal(uint8_t code)
 }
 
 ///////////////////// Graphics Helpers /////////////////////
-void nextState() 
-{
-  state++;
-  tft.fillScreen(COLORS[BACKGROUND]);
-  for (uint8_t i = 0; i < 4; i++){btns[i].erase();}
-  btns[state-1].select();
-  switch(state) 
-  {
-    case USER_INPUT:
-      i_cursor = 0;
-      moveCursor(i_cursor, i_cursor);
-    break;
-    case RUN_TEST:
-      t_start = millis();
-    break;
-    case COMPLETE:
-      sendInoSignal(CODES[STOP]);
-    break;
-  }
-  btns[state-1].draw();
-}
-
 void printProgressBar()
 {
   const int16_t y = MARGIN+(3)*ROW_HEIGHT;
@@ -290,7 +294,7 @@ void moveCursor(uint16_t p0, uint16_t p1)
   uint16_t y;
   
   // erase last cursor
-  btns[BTN_UPLOAD].deselect();
+  btn.deselect();
   if (p0 != UPLOAD_BUTTON)
   {
     label = labels[p0][VALUE]; 
@@ -306,7 +310,7 @@ void moveCursor(uint16_t p0, uint16_t p1)
     erase(label, x, y, S_TEXT[OPTIONS]);
     myPrint(label, x, y, S_TEXT[LABELS], COLORS[TEXT], false);
   }
-  else {btns[BTN_UPLOAD].select();}
+  else {btn.select();}
   
   state_cursor = true;
 }
@@ -375,11 +379,7 @@ void myPrint(String label, int16_t x, int16_t y, uint16_t textSize, uint16_t tex
 }
 
 //////////////////////////// Generic Helper Functions ////////////////////////////
-unsigned long get_del_t(unsigned long t0) 
-{
-  const unsigned long t = millis();
-  return t-t0;
-}
+unsigned long get_del_t(unsigned long t0) {return millis()-t0;}
 
 uint16_t wrap(int16_t x, int16_t X0, int16_t X1) 
 {

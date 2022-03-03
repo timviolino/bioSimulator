@@ -3,17 +3,12 @@
 
 mcp2515_can CAN1(SPI_CS_PIN);
 
-////////////////// Constant Definitions /////////////////
-enum {P, V, To, KP, KD};          // cols of CMD
-enum {INIT, MIN, MAX, BIT};       // rows of CMD
-enum {ENTER, EXIT, ZERO};         // indices of MODES
 const float CMD[4][N_CMDS] = {
-  {  0.0f,   0.0f,    0.0f,  25.f,   0.5f},
+  {  0.0f,   0.0f,    0.0f,  175.f,   .2f},
   {-12.5f, -50.00f, -25.0f,   0.0f,  0.0f},
   { 12.5f,  50.00f,  25.0f, 500.0f,  5.0f},
   { pow(2, 16)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1}
 };
-
 const byte MODES[3] = {0xFC, 0xFD, 0xFE};
 
 ////////////////// Function Definitions /////////////////
@@ -40,17 +35,15 @@ void CubeMarsAK::setID(uint8_t id) {_id = id;}
 
 void CubeMarsAK::setPower(bool powered) {_powered = powered;}
 
-void CubeMarsAK::setKD(float KD_input) {_cmds[KD] = KD_input;}
+void CubeMarsAK::set(uint8_t i, float x) {_cmds[i] = x;}
 
-void CubeMarsAK::setKP(float KP_input) {_cmds[KP] = KP_input;}
-
-float CubeMarsAK::getPos() {
-  return _uint_to_float(_reads[0], CMD[MIN][P], CMD[MAX][P], CMD[BIT][P]);
+float CubeMarsAK::get(uint8_t i) {
+  return _uint_to_float(_reads[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);
   }
 
 void CubeMarsAK::_packCmds() {
   unsigned int _cmdInts[N_CMDS];
-  for (int i = 0; i<N_CMDS; i++) 
+  for (uint8_t i = 0; i<N_CMDS; i++) 
   {
     _cmds[i] = constrain(_cmds[i], CMD[MIN][i], CMD[MAX][i]);                    // limit data to be within bounds
     _cmdInts[i] = _float_to_uint(_cmds[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);   // convert floats to unsigned ints 
@@ -82,11 +75,11 @@ void CubeMarsAK::_unpackReply() {
 void CubeMarsAK::_setMode(byte mode){
  if(mode == MODES[ZERO]) // NOTE: must give all zero command before zeroing
  {
-    for (int i = 0; i < N_CMDS; i++) {_cmds[i] = 0.0f;}
+    for (uint8_t i = 0; i < N_CMDS; i++) {_cmds[i] = 0.0f;}
     setPos(0.0f);
  }
  
- for (int i=0; i < BUF_LENGTH; i++) {_buf[i] = 0xFF;}
+ for (uint8_t i = 0; i < BUF_LENGTH; i++) {_buf[i] = 0xFF;}
  _buf[7] = mode;
  CAN1.sendMsgBuf(_id, 0, BUF_LENGTH, _buf);
  delay(1000);

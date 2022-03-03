@@ -6,22 +6,25 @@
 #include <Wire.h>                         // Used for networking between Arduinos
 
 ////////////////////////////// Global Constant Defintions //////////////////////////////
-#define DEBUG
+//#define DEBUG
 #define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
 #define SPI_CS_PIN 10                         // attach to arduino pin d4 MUST BE 9 FOR UNO SHIELD
 enum {WAIT, BOOT, RUN_TEST, COMPLETE};        // machine states
 enum {FREQUENCY, STROKE};                     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
 enum {START, STOP};                           // indices of i2c codes
-const bool ON[3] = {true, false, false};
-const bool OFF[3] = {false, false, false};
+const bool ON[3] = {true, false, false};      // code sent to turn selected motors on
+const bool OFF[3] = {false, false, false};    // code sent to turn all motors off
 const uint8_t N_MTR = 3;                      // number of motors
 const uint8_t ADDY = 10;                      // i2c address
 constexpr uint8_t CODES[2] = {245, 255};      // i2c codes, needs 'constexpr' modifier to be used in switch case
-const uint8_t I_STEP = 4;                     // step size taken through sine wave
+const uint8_t I_STEP = 1;                     // step size taken through sine wave
 const uint8_t t_FSTEP = 250;                  // time per step of ramp
 const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus
 const float F_STEP = 0.1f;                    // step at which the frequency is changed
+const float range_Kp[2] = {55, 165};
+const float range_Kd[2] = {0.2, 0.5};
+const uint8_t range_i_step[2] = {1, 4};
 
 mcp2515_can CAN(SPI_CS_PIN);
 CubeMarsAK motors[N_MTR];
@@ -64,7 +67,7 @@ void loop()
       bootTiming();
       break;
     case RUN_TEST:
-      oscillate(t_step, I_STEP);
+      takeStep(t_step, I_STEP);
       break;
     case COMPLETE:
       ramp(params[FREQUENCY], 0);
@@ -77,26 +80,33 @@ void loop()
 
 /////////////////// High Level Functions ///////////////////
 
-void oscillate(unsigned long t_step, uint8_t i_step)
+void takeStep(unsigned long t_step, uint8_t i_step)
 {
   uint8_t i, i_new;
-  uint64_t del_t = get_del_t(t_lastStep);           // record time since last step
-  if (del_t > t_step)                               // check if time between steps has elapsed
-  {
-    t_lastStep += del_t;                            // update time of last step
-    float p = getPos(i_pos);                        // record position on sine wave
-    i_new = i_pos + i_step;                         // save temporary value for next logic statement
-    i_pos = (i_new >= 120) ? 0 : i_new;             // if i+step >= 120, i = 0; else i += step
-    for (i = 0; i < N_MTR; i++) {
-      motors[i].setPos(p);
-      if (motors[i]._powered) {
-        Serial.print(radToDeg(p));
-        Serial.print(" ");
-        float out = radToDeg(motors[i].getPos());
-        Serial.println(out);
-      }
+  uint64_t del_t = get_del_t(t_lastStep);         // record time since last step
+  if (del_t <= t_step) {return;}                  // check if time between steps has elapsed
+  t_lastStep += del_t;                            // update time of last step
+  float p = getPos(i_pos);                        // record position on sine wave
+  i_new = i_pos + i_step;                         // save temporary value for next logic statement
+  i_pos = (i_new >= 120) ? 0 : i_new;             // if i+step >= 120, i = 0; else i += step
+  for (i = 0; i < N_MTR; i++) {
+    motors[i].setPos(p);
+    if (motors[i]._powered) {
+      Serial.print(radToDeg(p));
+      printMotorOutput(i);
     }
   }
+}
+
+void printMotorOutput(uint8_t i)
+{
+  Serial.print(" ");
+  float p_out = radToDeg(motors[i].get(P));
+  Serial.print(p_out);
+  float v_out = motors[i].get(V);
+  Serial.print(" " + String(v_out));
+  float t_out = motors[i].get(To);
+  Serial.println(" " + String(t_out));
 }
 
 void ramp(float f0, float f1)
@@ -109,7 +119,7 @@ void ramp(float f0, float f1)
   {
     del_t = get_del_t(t0);
     t_step = get_t_step(f, STEPS / I_STEP) + 1;
-    oscillate(t_step, I_STEP);
+    takeStep(t_step, I_STEP);
     if (del_t > t_FSTEP)
     {
       f += dir * F_STEP;
@@ -123,7 +133,7 @@ void center()
   uint8_t f = 1; uint8_t i_step = 1;
   t_step = get_t_step(f, STEPS) + 1;              // set time step for centering
   while (i_pos != i_step) {
-    oscillate(t_step, i_step);                    // rotate until theta = 0
+    takeStep(t_step, i_step);                    // rotate until theta = 0
   }
 }
 
@@ -187,9 +197,13 @@ void initCANShield()
 
 void initMotors(bool powered[3])
 {
+  float Kd, Kp;
+  
   for (int i = 0; i < N_MTR; i++) {
     motors[i].setID(i+3);
     motors[i].setPower(powered[i]);
+    motors[i].set(KD, Kd);
+    motors[i].set(KP, Kp);
     motors[i].init();
   }
   stroke_rad = degToRad(params[STROKE]);
