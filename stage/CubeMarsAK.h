@@ -7,8 +7,7 @@
 #define BUF_LENGTH 8
 #define N_CMDS 5
 enum {P, V, To, KP, KD};          // cols of CMD
-enum {INIT, MIN, MAX, BIT};       // rows of CMD
-enum {ENTER, EXIT, ZERO};         // indices of MODES
+
 
 
 class CubeMarsAK
@@ -25,8 +24,8 @@ class CubeMarsAK
     void _packCmds();
     void _unpackReply();
     void _setMode(byte mode);
-    float _uint_to_float(unsigned int, float, float, float);
-    unsigned int _float_to_uint(float, float, float, float);
+    float _ui2f(unsigned int, float, float, float);
+    unsigned int _f2ui(float, float, float, float);
     
   public:
     bool _powered;

@@ -10,19 +10,19 @@
 class Label : public GUIBase {
   
   protected:
-    int16_t  x1, y1;
-    uint16_t wi, he;
-    uint16_t color = COLORS[TEXT];
+    const uint16_t TEXT_SIZES[3] = {2, 3, 4};
+    enum {OPTIONS, LABELS, TITLES};
   
   public:
-    int16_t x, y;
-    String text;
+    char *text;
     int16_t size;
-    Adafruit_HX8357 tft = Adafruit_HX8357(9, 10, -1);
+    uint16_t color = COLORS[TEXT];
+    bool centered = false;
   
     Label();
     void center();
-    void draw(bool centered);
+    void draw();
+    void changeSize(int8_t);
 };
 
 class Button : public Label {
@@ -34,10 +34,28 @@ class Button : public Label {
   public:
     Button();
     uint16_t fill = COLORS[BUTTONS];
-    void select();
-    void deselect();
+    void select(bool);
     void draw();
     void erase();
 };
 
+class ProgressBar : public GUIBase {
+
+  private:
+    uint16_t _wi_in;
+    const uint8_t _R = 10;
+    const uint32_t HRS_TO_S = 60*60;
+    const uint32_t HRS_TO_MS = HRS_TO_S*1000;
+    float _getPercent();
+
+  public:
+    enum {OUT, IN};
+    bool complete = false;
+    uint16_t fill[2] = {HX8357_WHITE, HX8357_GREEN};
+    uint16_t duration = 10;                              // 10x number of hours 
+    uint64_t t_start = 0;
+    ProgressBar();
+    void draw();
+  
+};
 #endif

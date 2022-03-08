@@ -9,46 +9,48 @@
 //#define DEBUG
 #define CAN_INT_PIN 3                         // attach to arduino pin d3 to connect with can shield int
 #define SPI_CS_PIN 10                         // attach to arduino pin d4 MUST BE 9 FOR UNO SHIELD
-enum {WAIT, BOOT, RUN_TEST, COMPLETE};        // machine states
-enum {FREQUENCY, STROKE};                     // indices of parameters
+enum {WAIT, START, RUN_TEST, STOP};           // machine states
+enum {FREQUENCY, STROKE, STEP, _KP, _KD};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
-enum {START, STOP};                           // indices of i2c codes
+enum {MIN, MAX};                              // indices of ranges
 const bool ON[3] = {true, false, false};      // code sent to turn selected motors on
 const bool OFF[3] = {false, false, false};    // code sent to turn all motors off
 const uint8_t N_MTR = 3;                      // number of motors
 const uint8_t ADDY = 10;                      // i2c address
-constexpr uint8_t CODES[2] = {245, 255};      // i2c codes, needs 'constexpr' modifier to be used in switch case
-const uint8_t I_STEP = 1;                     // step size taken through sine wave
+constexpr uint8_t CODES[4] = {0, 245, 0, 255};// i2c codes, needs 'constexpr' modifier to be used in switch case
 const uint8_t t_FSTEP = 250;                  // time per step of ramp
 const uint64_t BAUD_RATE = 230400;            // rate of communications over serial bus
 const float F_STEP = 0.1f;                    // step at which the frequency is changed
-const float range_Kp[2] = {55, 165};
-const float range_Kd[2] = {0.2, 0.5};
-const uint8_t range_i_step[2] = {1, 4};
+const float RANGE[5][2] = {
+  {1.f, 5.f},                                 // frequency [Hz]
+  {3.f, 7.5f},                                // stroke [deg]
+  {1.f, 4.f},                                 // step size for sine wave [0-120]
+  {175.f, 55.f},                              // Kp 
+  {0.2f, 0.5f}                                // Kd
+};
+const uint8_t RANGE_MOD[3] = {FREQUENCY, FREQUENCY, STROKE}; // indices of independent variable to select step, Kp, Kd
 
 mcp2515_can CAN(SPI_CS_PIN);
 CubeMarsAK motors[N_MTR];
 
 ////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
-// The expected test parameters are as follows:
-// frequency in Hz {0.5, 5}
-// stroke in deg {1, 7.5}
 
-volatile float params[2] = {5.0f, 2.0f};                // stores parameters for duration of test
+volatile float params[5] = {1.0f, 3.0f, 1.f, 175.f, 0.2f};   // stores parameters: [Hz, deg, 0-120, Kp, Kd] 
 float days = 0.0f, hours = 4.0f, mins = 0.0f;           // easy duration set up
 uint8_t state = WAIT;                                   // current machine state
-float stroke_rad = 0.0f;                                     // motor input equivalent to user specified deg's of rotation
+float stroke_rad = 0.0f;                                // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                      // stores current index used for wave array
 uint8_t t_step = 0;                                     // time between steps on wave
 unsigned long t_lastStep = 0;                           // time at which motors were last actuated
 uint8_t i_input = FREQUENCY;                            // index of param for ui upload
-float p_offset = 3.5f;
-uint64_t i_offset = 0;
+uint8_t i_step = 1;                                     // step size taken through sine wave
 
 //////////////////////////////// Setup & Loop ////////////////////////////////
 void setup()
 {
   mySerialBegin();
+  pinMode(SDA, INPUT_PULLUP);
+  pinMode(SCL, INPUT_PULLUP);
   Wire.begin(ADDY);
   Wire.onReceive(receive);
 }
@@ -59,17 +61,17 @@ void loop()
   {
     case WAIT:
       break;
-    case BOOT:
+    case START:
       state = RUN_TEST;               // NOTE - this needs to be at beginning else it will override STOP signal from display
       initCANShield();
       initMotors(ON);
       ramp(0, params[FREQUENCY]);
-      bootTiming();
+      initTiming();
       break;
     case RUN_TEST:
-      takeStep(t_step, I_STEP);
+      takeStep(t_step, i_step);
       break;
-    case COMPLETE:
+    case STOP:
       ramp(params[FREQUENCY], 0);
       center();
       initMotors(OFF);
@@ -92,8 +94,8 @@ void takeStep(unsigned long t_step, uint8_t i_step)
   for (i = 0; i < N_MTR; i++) {
     motors[i].setPos(p);
     if (motors[i]._powered) {
-      Serial.print(radToDeg(p));
-      printMotorOutput(i);
+      //Serial.print(radToDeg(p));
+      //printMotorOutput(i);
     }
   }
 }
@@ -118,8 +120,8 @@ void ramp(float f0, float f1)
   while (dir * (f1 - f) > F_STEP)
   {
     del_t = get_del_t(t0);
-    t_step = get_t_step(f, STEPS / I_STEP) + 1;
-    takeStep(t_step, I_STEP);
+    t_step = get_t_step(f, STEPS / i_step) + 1;
+    takeStep(t_step, i_step);
     if (del_t > t_FSTEP)
     {
       f += dir * F_STEP;
@@ -135,21 +137,6 @@ void center()
   while (i_pos != i_step) {
     takeStep(t_step, i_step);                    // rotate until theta = 0
   }
-}
-
-void printOffset(float p)
-{
-  const float p_max = 3.5;
-  i_offset ++;
-  if (i_offset > 1000) {
-    p_offset = p_max;
-  }
-  float del_p = abs(p - p_max);
-  if (del_p < p_offset) {
-    p_offset = del_p;
-  }
-  Serial.print(" ");
-  Serial.println(p_offset);
 }
 
 /////////////////// Low Level Functions ///////////////////
@@ -169,10 +156,10 @@ void receive(int b) {
   uint8_t msg = Wire.read();
   switch (msg) {
     case CODES[STOP]:
-      state = COMPLETE;
+      state = STOP;
       break;
     case CODES[START]:
-      state = BOOT;
+      state = START;
       break;
     default:
       params[i_input] = msg / 10.0f;
@@ -197,21 +184,26 @@ void initCANShield()
 
 void initMotors(bool powered[3])
 {
-  float Kd, Kp;
-  
-  for (int i = 0; i < N_MTR; i++) {
+  stroke_rad = degToRad(params[STROKE]);
+  for(uint8_t i = 2; i < 5; i++) {
+    uint8_t j = RANGE_MOD[i-2];
+    Serial.print(String(params[j]) + " ");
+    Serial.print(" ");
+    params[i] = interpolate(params[j], RANGE[j], RANGE[i]); 
+    Serial.println(params[i]);
+  }
+  for (uint8_t i = 0; i < N_MTR; i++) {
     motors[i].setID(i+3);
     motors[i].setPower(powered[i]);
-    motors[i].set(KD, Kd);
-    motors[i].set(KP, Kp);
+    //motors[i].set(KP, params[_KP]);
+    //motors[i].set(KD, params[_KD];
     motors[i].init();
   }
-  stroke_rad = degToRad(params[STROKE]);
 }
 
-void bootTiming()
+void initTiming()
 {
-  t_step = get_t_step(params[FREQUENCY], STEPS / I_STEP);
+  t_step = get_t_step(params[FREQUENCY], STEPS / i_step);
   t_lastStep = millis();
 }
 
@@ -225,6 +217,11 @@ void mySerialBegin()
 float getMillis(float d, float hr, float m) {return 60.f*1000.f*(d * 1440.f + hr * 60.f + m);}
 
 unsigned long get_del_t(unsigned long t0) {return millis() - t0;}
+
+float interpolate(float x, const float X[2], const float Y[2]) 
+{
+  return Y[MIN] + (x - X[MIN]) / (X[MAX] - X[MIN]) * (Y[MAX] - Y[MIN]);
+}
 
 // Note, there is a slight offset per radian in the encoder, hence the deviation from 0.01745
 float degToRad(float deg) {return deg * 0.017125f;}

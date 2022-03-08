@@ -3,8 +3,10 @@
 
 mcp2515_can CAN1(SPI_CS_PIN);
 
+enum {INIT, MIN, MAX, BIT};       // rows of CMD
+enum {ENTER, EXIT, ZERO};         // indices of MODES
 const float CMD[4][N_CMDS] = {
-  {  0.0f,   0.0f,    0.0f,  175.f,   .2f},
+  {  0.0f,   0.0f,    0.0f,  115.f,   .5f},
   {-12.5f, -50.00f, -25.0f,   0.0f,  0.0f},
   { 12.5f,  50.00f,  25.0f, 500.0f,  5.0f},
   { pow(2, 16)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1}
@@ -37,16 +39,14 @@ void CubeMarsAK::setPower(bool powered) {_powered = powered;}
 
 void CubeMarsAK::set(uint8_t i, float x) {_cmds[i] = x;}
 
-float CubeMarsAK::get(uint8_t i) {
-  return _uint_to_float(_reads[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);
-  }
+float CubeMarsAK::get(uint8_t i) {return _ui2f(_reads[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);}
 
 void CubeMarsAK::_packCmds() {
   unsigned int _cmdInts[N_CMDS];
   for (uint8_t i = 0; i<N_CMDS; i++) 
   {
     _cmds[i] = constrain(_cmds[i], CMD[MIN][i], CMD[MAX][i]);                    // limit data to be within bounds
-    _cmdInts[i] = _float_to_uint(_cmds[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);   // convert floats to unsigned ints 
+    _cmdInts[i] = _f2ui(_cmds[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);   // convert floats to unsigned ints 
   }
 
   /// pack ints into the can buffer, bit 0 is LSB ///
@@ -85,14 +85,13 @@ void CubeMarsAK::_setMode(byte mode){
  delay(1000);
 }
 
-unsigned int CubeMarsAK::_float_to_uint(float x, float x_min, float x_max, float bits){
- /// Converts a float to an unsigned int, given range and number of bits ///
+// Conversions between float and unsigned int
+unsigned int CubeMarsAK::_f2ui(float x, float x_min, float x_max, float bits){
  float span = x_max - x_min;
  return (uint32_t) ((x-x_min)*bits/span);
 }
 
-float CubeMarsAK::_uint_to_float(unsigned int x_int, float x_min, float x_max, float bits){
- /// converts unsigned int to float, given range and number of bits ///
+float CubeMarsAK::_ui2f(unsigned int x_int, float x_min, float x_max, float bits){
  float span = x_max - x_min;
  return ((float)x_int)*span/bits + x_min;
 }

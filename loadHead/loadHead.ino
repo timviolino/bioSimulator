@@ -1,4 +1,4 @@
-#define DEBUG
+//#define DEBUG
 
 ////////////////////////////// Library Imports ///////////////////////////////
 #include <HX711.h>                            // Used for reading load cell amplifier
@@ -172,7 +172,4 @@ void mySerialBegin() {
   while (!Serial);            // wait for serial
 }
 
-int16_t interpolate(float k, const uint8_t X[2])
-{
-  return X[MIN] + k * (X[MAX] - X[MIN]);
-}
+int16_t interpolate(float k, const uint8_t X[2]) {return X[MIN] + k * (X[MAX] - X[MIN]);}

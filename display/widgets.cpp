@@ -10,7 +10,7 @@ void Label::center()
   x = (WIDTH-wi)/2;
 }
 
-void Label::draw(bool centered) 
+void Label::draw() 
 {
   tft.setTextSize(size);
   if(centered){center();}
@@ -19,18 +19,26 @@ void Label::draw(bool centered)
   tft.println(text);
 }
 
+void Label::changeSize(int8_t x)
+{
+  color = COLORS[BACK];
+  draw();
+  size += x;
+  color = COLORS[TEXT];
+  draw();
+}
+
 Button::Button() 
   : Label()
 {}
 
-void Button::select() {color = COLORS[TEXT];}
-
-void Button::deselect() {color = COLORS[BACKGROUND];}
+void Button::select(bool selected) {color = (selected) ? COLORS[TEXT] : COLORS[BACK];}
 
 void Button::draw() 
 {                                    
+  centered = true;
   if(!filled) {setFill();}
-  Label::draw(true);
+  Label::draw();
 }
 
 void Button::setFill()
@@ -43,6 +51,26 @@ void Button::setFill()
 
 void Button::erase()
 {
-  deselect();
+  select(false);
   filled = false;
+}
+
+ProgressBar::ProgressBar()
+  :GUIBase()
+{}
+
+void ProgressBar::draw()
+{
+  const float percent = _getPercent();
+  _wi_in = (wi-_R)*percent;
+  complete = (wi < _wi_in+_R);
+  tft.drawRoundRect(x, y, wi, he, _R, fill[OUT]);                               // print border
+  tft.fillRoundRect(x+1, y+1, 2*_R, he-2, _R, fill[IN]);                        // need this to prevent curves from overlapping
+  if (!complete) {tft.fillRoundRect(x+_R, y+1, _wi_in, he-2, _R, fill[IN]);}    // print and update filler
+}
+
+float ProgressBar::_getPercent()
+{
+  uint64_t del_t = get_del_t(t_start);
+  return del_t/(duration/10.f*HRS_TO_MS);
 }
