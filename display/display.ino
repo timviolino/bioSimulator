@@ -1,7 +1,5 @@
 ////////////////////////////////////////// Library Imports //////////////////////////////////////////
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_HX8357.h>            // https://github.com/adafruit/Adafruit_HX8357_Library
+#include <SPI.h>        
 #include <Wire.h>                       // Used for networking between Arduinos
 #include "controlKnob.h"
 #include "widgets.h"
@@ -13,40 +11,22 @@
 #define KNOB_BUTTON 4
 #define TFT_DC 9
 #define TFT_CS 10
-enum {BACK, TEXT};                                      // indices of graphics colors array
-enum {OPTIONS, LABELS, TITLES};                         // indices of text size array
-enum {PARAM, VALUE, UNIT};                              // cols of label array
 enum {FREQUENCY, STROKE, LOAD, HOURS, BTN};             // indices of cursor position
 enum {BOOT, USER_INPUT, UPLOAD, RUN_TEST, COMPLETE};    // indices of machine states
 enum {STAGE, LH};                                       // indices of arduino addresses
 enum {START, STOP};                                     // indices of CODES
-enum {MIN, MAX, CHARS, STEP};                           // indices of DATA cols
 const uint8_t INO_ADDYS[2] = {10, 11};
 const uint8_t CODES[2] = {245, 255};                                  // i2c codes
 const uint8_t N_PARAMS = 4;
-const uint8_t N_BTNS = 4;
-const uint8_t S_TEXT[3] = {2, 3, 4};
-const uint8_t DATA[N_PARAMS][N_PARAMS] = {
-  {1, 3, 50, 1},
-  {50, 75, 40, 75},
-  {3, 3, 4, 3},
-  {1, 1, 100, 10}
-};
-const uint16_t COLORS[2] = {HX8357_BLACK, HX8357_WHITE};              
-const uint8_t MARGIN = 5;
-const uint16_t WIDTH = HX8357_TFTWIDTH-2*MARGIN;
-const uint16_t HEIGHT = HX8357_TFTHEIGHT-2*MARGIN;
+const uint8_t N_BTNS = 4;            
 const uint8_t ROWS = 6;
 const uint8_t COLS = 3;
 const uint16_t ROW_HEIGHT = HEIGHT/ROWS;
 const uint16_t COL_WIDTH = WIDTH/COLS;
 const uint16_t COL_WIDTHS[3] = {WIDTH/2, WIDTH/3, WIDTH/6};
 const uint32_t BAUD_RATE = 115200; 
-const char optionUnit[N_PARAMS][4] =  {"Hz", "Deg", "N", "hr"};
-char BTN_TEXT[N_BTNS][11] = {"Upload", "Start Test", "Stop Test", "Restart"};
 char TITLE_TEXT[7][23] = {"bioSimulator", "Parameters", "Parameters Uploaded", "Mount specimen now!", "Test in Progress...", "Test Completed", "Please remove specimen"};
-const char optionName[N_PARAMS][12] = {"Frequency: ", "Stroke: ", "Load: ", "Duration: "};
-
+char BTN_TEXT[N_BTNS][11] = {"Upload", "Start Test", "Stop Test", "Restart"};
 
 ////////////////////////////////////////// Global Variable Declarations //////////////////////////////////////////
 bool blinking = false;                                      // whether or not parameter is being edited
@@ -56,7 +36,6 @@ uint8_t i_cursor = FREQUENCY;                               // index of the curs
 int8_t i_enc;                                               // number of encoder steps since last interrupt
 uint64_t t_lastBlink = 0;                                   // time [ms] that cursor last blinked
 volatile uint16_t params[N_PARAMS] = {10, 30, 500, 10};     // stores 10x the test parameters as user updates them
-char optionValue[N_PARAMS][6] = {"1.0", "3.0", "50.0", "1.0"};
 uint16_t pb_delay;
 
 ///////////////////// Object Declarations /////////////////////
@@ -83,7 +62,7 @@ void loop() //all dynamic widgets happen here
   switch(state) 
   {
     case BOOT:
-      updateLabel(TITLE_TEXT[0], MARGIN + 2*ROW_HEIGHT, S_TEXT[TITLES]);
+      updateLabel(TITLE_TEXT[0], MARGIN + 2*ROW_HEIGHT, SIZES[TITLES]);
       delay(1000);
       nextState();
     break;
@@ -109,16 +88,16 @@ void loop() //all dynamic widgets happen here
 void nextState() // state transfer function: all static widgets happen here
 {
   const uint16_t he[2] = {MARGIN + 2*ROW_HEIGHT, MARGIN + 3*ROW_HEIGHT};
-  const uint8_t s = S_TEXT[OPTIONS];
+  const uint8_t s = SIZES[OPTIONS];
   state++;
   tft.fillScreen(COLORS[BACK]);
   switch(state) 
   {
     case USER_INPUT:
-      updateLabel(TITLE_TEXT[1], MARGIN, S_TEXT[TITLES]);
+      updateLabel(TITLE_TEXT[1], MARGIN, SIZES[TITLES]);
       i_cursor = 0;
       drawOptions();
-      drawCursor(i_cursor, i_cursor, optionValue[i_cursor], optionValue[i_cursor]);
+      initCursor();
     break;
     case UPLOAD:
       updateLabel(TITLE_TEXT[2], he[0], s);
@@ -163,7 +142,7 @@ void initBtn()
 {
   btn.tft = tft;
   btn.y = MARGIN+(ROWS-1)*ROW_HEIGHT;
-  btn.size = S_TEXT[TITLES];
+  btn.size = SIZES[TITLES];
 }
 
 void initProgressBar()
@@ -180,8 +159,8 @@ void initProgressBar()
 
 void updateBtn(uint8_t i) 
 {
-  btn.erase();
   const bool BTN_FILLS[N_BTNS] = {0, 0, 1, 0};
+  btn.erase();
   btn.text = BTN_TEXT[i];
   btn.fill = (BTN_FILLS[i] == 0) ? HX8357_GREEN : HX8357_RED;
   if (i+1 != USER_INPUT) {btn.select(true);}
@@ -214,7 +193,7 @@ void push()
       {
         next = false;
         blinking = !blinking;
-        drawCursor(i_cursor, i_cursor, optionValue[i_cursor], optionValue[i_cursor]);
+        initCursor();
         t_lastBlink = millis();
       }
     break;
@@ -227,6 +206,13 @@ void push()
     break;
   }
   if (next) {nextState();}
+}
+
+void initCursor()
+{
+  char label[6];
+  getParamChar(i_cursor, label);
+  drawCursor(i_cursor, i_cursor, label, label);
 }
 
 void updateCursor() 
@@ -243,10 +229,10 @@ void updateCursor()
   bool encChange = (i_enc != 0);
   if (encChange && blinking) {t_lastBlink = millis();}
   if (encChange || blinkChange) {
-    memcpy(label0, optionValue[i0], sizeof(optionValue[i0]));
+    if (i0 != BTN) {getParamChar(i0, label0);}
     if (blinking) {updateParam(i_cursor, i_enc);}
     else {i1 = wrap(i_cursor+i_enc, FREQUENCY, BTN);}
-    memcpy(label1, optionValue[i1], sizeof(optionValue[i1]));
+    if (i1 != BTN) {getParamChar(i1, label1);}
     drawCursor(i0, i1, label0, label1);
   }
   i_enc = 0; i_cursor = i1;
@@ -254,14 +240,21 @@ void updateCursor()
 
 void updateParam(uint16_t i, int8_t x) 
 {
-  float param_f;
-  const uint16_t p_min = 10*DATA[MIN][i];           
-  const uint16_t p_max = (i < 2) ? DATA[MAX][i] : DATA[MAX][i]*100;
-  const uint8_t p_chars = DATA[CHARS][i];                                      
-  params[i] += x*DATA[STEP][i];                     // update internally stored float for onscreen param when user turns encoder
+  const uint8_t DATA[3][N_PARAMS] = {
+  {1, 3, 50, 1},
+  {50, 75, 40, 75},
+  {1, 1, 100, 10}};
+  const uint16_t p_min = 10*DATA[0][i];           
+  const uint16_t p_max = (i < 2) ? DATA[1][i] : DATA[1][i]*100;                                     
+  params[i] += x*DATA[2][i];                        // update internally stored float for onscreen param when user turns encoder
   params[i] = constrain(params[i], p_min, p_max);   // constrain param within bounds
-  param_f = params[i]/10.f;                         // convert parameter to floating point
-  dtostrf(param_f, p_chars, 1, optionValue[i]);     // create a new string for updated param to be printed next step of loop()
+}
+
+void getParamChar(uint8_t i, char* paramChar)
+{
+  const uint8_t p_chars = (i != 2) ? 3 : 4; 
+  float param_f = params[i]/10.f;               // convert parameter to floating point
+  dtostrf(param_f, p_chars, 1, paramChar);      // create a new string for updated param to be printed next step of loop()
 }
 
 void uploadParams()
@@ -297,12 +290,12 @@ void drawCursor(uint8_t i0, uint8_t i1, char label0[6], char label1[6])
   l0.text = label0; l1.text = label1;
   const uint16_t x = MARGIN + COL_WIDTHS[0];
   l0.x = x; l1.x = x;
-  l0.size = S_TEXT[LABELS];
-  l1.size = S_TEXT[OPTIONS];
+  l0.size = SIZES[LABELS];
+  l1.size = SIZES[OPTIONS];
   l0.y = MARGIN + (i0+1)*ROW_HEIGHT;
   l1.y = MARGIN + (i1+1)*ROW_HEIGHT;
   if(blinking) {
-    l1.size = S_TEXT[LABELS];
+    l1.size = SIZES[LABELS];
     l0.color = COLORS[BACK];
     l1.color = (getBlink()) ? COLORS[BACK] : COLORS[TEXT];
     l0.draw();
@@ -329,30 +322,25 @@ uint16_t getBlink()
 
 void drawOptions() 
 {
-  Label option;
-  option.tft = tft;
-  option.size = S_TEXT[OPTIONS];
+  const char optionName[N_PARAMS][12] = {"Frequency: ", "Stroke: ", "Load: ", "Duration: "};
+  const char optionUnit[N_PARAMS][4] =  {"Hz", "Deg", "N", "hr"};
+  title.size = SIZES[OPTIONS];
+  title.centered = false;
   for(uint8_t i = 0; i < N_PARAMS; i++) 
   {
-    option.x = MARGIN; 
-    option.y = MARGIN + (i+1)*ROW_HEIGHT;
+    title.x = MARGIN; 
+    title.y = MARGIN + (i+1)*ROW_HEIGHT;
     for (uint8_t j = 0; j < COLS; j++) 
     {
       char label[12];
       switch(j){
-        case 0:
-          memcpy(label, optionName[i], sizeof(optionName[i]));
-          break;
-        case 1:
-          memcpy(label, optionValue[i], sizeof(optionValue[i]));
-          break;
-        case 2:
-          memcpy(label, optionUnit[i], sizeof(optionUnit[i]));
-          break;
+        case 0: memcpy(label, optionName[i], sizeof(optionName[i])); break;
+        case 1: getParamChar(i, label); break;
+        case 2: memcpy(label, optionUnit[i], sizeof(optionUnit[i])); break;
       }
-      option.text = label;
-      option.draw();
-      option.x += COL_WIDTHS[j];
+      title.text = label;
+      title.draw();
+      title.x += COL_WIDTHS[j];
     }
   }
 }

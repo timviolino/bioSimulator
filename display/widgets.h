@@ -3,9 +3,28 @@
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_HX8357.h>
-#include "GUIBase.h"
+#include <Adafruit_HX8357.h>    // https://github.com/adafruit/Adafruit_HX8357_Library
 
+enum {OPTIONS, LABELS, TITLES};                         // indices of text size array
+enum {BACK, BUTTONS, TEXT};                             // indices of colors array
+const uint8_t SIZES[3] = {2, 3, 4};
+const uint16_t COLORS[3] = {HX8357_BLACK, HX8357_GREEN, HX8357_WHITE};
+const uint8_t MARGIN = 5;
+const uint16_t WIDTH = HX8357_TFTWIDTH-2*MARGIN;
+const uint16_t HEIGHT = HX8357_TFTHEIGHT-2*MARGIN;
+
+class GUIBase 
+{
+  protected:
+    GUIBase();
+    int16_t  x1, y1;
+    uint64_t get_del_t(uint64_t);
+
+  public:
+    int16_t x, y;
+    uint16_t wi, he;
+    Adafruit_HX8357 tft = Adafruit_HX8357(9, 10, -1);
+};
 
 class Label : public GUIBase {
   

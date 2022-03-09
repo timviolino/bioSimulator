@@ -1,5 +1,10 @@
 #include "widgets.h"
 
+GUIBase::GUIBase()
+{}
+
+uint64_t GUIBase::get_del_t(uint64_t t0) {return millis()-t0;}
+
 Label::Label() 
   : GUIBase()
 {}
@@ -36,6 +41,7 @@ void Button::select(bool selected) {color = (selected) ? COLORS[TEXT] : COLORS[B
 
 void Button::draw() 
 {                                    
+  Serial.println(text);
   centered = true;
   if(!filled) {setFill();}
   Label::draw();
