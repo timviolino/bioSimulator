@@ -8,8 +8,6 @@
 #define N_CMDS 5
 enum {P, V, To, KP, KD};          // cols of CMD
 
-
-
 class CubeMarsAK
 {
   private:
@@ -24,8 +22,8 @@ class CubeMarsAK
     void _packCmds();
     void _unpackReply();
     void _setMode(byte mode);
-    float _ui2f(unsigned int, float, float, float);
-    unsigned int _f2ui(float, float, float, float);
+    float _ui2f(uint32_t, float, float, uint8_t);
+    uint32_t _f2ui(float, float, float, uint8_t);
     
   public:
     bool _powered;

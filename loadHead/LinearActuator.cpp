@@ -24,6 +24,6 @@ void LinearActuator::step(int16_t v, uint16_t t)
 void LinearActuator::init() {
   pinMode(_RPWM, OUTPUT);        // configure pin 10 as an output
   pinMode(_LPWM, OUTPUT);        // configure pin 11 as an output
-  step(-80, 1000);               // retract for 2 sec
+  step(-80, 2000);               // retract for 2 sec
   step(80, 900);                 // extend for 1 sec
 }

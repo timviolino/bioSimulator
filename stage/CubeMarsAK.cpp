@@ -6,10 +6,10 @@ mcp2515_can CAN1(SPI_CS_PIN);
 enum {INIT, MIN, MAX, BIT};       // rows of CMD
 enum {ENTER, EXIT, ZERO};         // indices of MODES
 const float CMD[4][N_CMDS] = {
-  {  0.0f,   0.0f,    0.0f,  115.f,   .5f},
-  {-12.5f, -50.00f, -25.0f,   0.0f,  0.0f},
-  { 12.5f,  50.00f,  25.0f, 500.0f,  5.0f},
-  { pow(2, 16)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1, pow(2, 12)-1}
+  {  0.f,    0.f,     0.f,    0.f,   0.f},
+  {-12.5f, -50.f,   -25.f,    0.f,   0.f},
+  { 12.5f,  50.f,    25.f,  500.f,   5.f},
+  { 16,     12,      12,     12,    12}
 };
 const byte MODES[3] = {0xFC, 0xFD, 0xFE};
 
@@ -21,7 +21,6 @@ void CubeMarsAK::init() {
   {
     _setMode(MODES[ENTER]);
     _setMode(MODES[ZERO]);                                       
-    for (uint8_t i = 0; i < N_CMDS; i++) {_cmds[i] = CMD[INIT][i];}
   }
   else {_setMode(MODES[EXIT]);}
 }
@@ -48,7 +47,6 @@ void CubeMarsAK::_packCmds() {
     _cmds[i] = constrain(_cmds[i], CMD[MIN][i], CMD[MAX][i]);                    // limit data to be within bounds
     _cmdInts[i] = _f2ui(_cmds[i], CMD[MIN][i], CMD[MAX][i], CMD[BIT][i]);   // convert floats to unsigned ints 
   }
-
   /// pack ints into the can buffer, bit 0 is LSB ///
   _buf[0] = _cmdInts[P] >> 8;                                   // 0: [position[15-8]]
   _buf[1] = _cmdInts[P] & 0xFF;                                 // 1: [position[7-0]]
@@ -86,12 +84,16 @@ void CubeMarsAK::_setMode(byte mode){
 }
 
 // Conversions between float and unsigned int
-unsigned int CubeMarsAK::_f2ui(float x, float x_min, float x_max, float bits){
- float span = x_max - x_min;
- return (uint32_t) ((x-x_min)*bits/span);
+uint32_t CubeMarsAK::_f2ui(float x, float x_min, float x_max, uint8_t bits)
+{
+  float span = x_max - x_min;
+  uint32_t s = 1;                 // arduino defaults to storing integers as int16_t
+  return (uint32_t) ((x- x_min)*((float)((s<<bits)/span)));
 }
 
-float CubeMarsAK::_ui2f(unsigned int x_int, float x_min, float x_max, float bits){
- float span = x_max - x_min;
- return ((float)x_int)*span/bits + x_min;
+float CubeMarsAK::_ui2f(uint32_t x_int, float x_min, float x_max, uint8_t bits)
+{
+  float span = x_max - x_min;
+  uint32_t s = 1;               // arduino defaults to storing integers as int16_t
+  return ((float)x_int)*span/((float)((s<<bits)-s)) + x_min;
 }
