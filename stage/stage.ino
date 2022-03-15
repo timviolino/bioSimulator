@@ -13,8 +13,8 @@ enum {WAIT, START, RUN_TEST, STOP};           // machine states
 enum {FREQUENCY, STROKE, STEP, _KP, _KD};     // indices of parameters
 enum {ROLL, PITCH, YAW};                      // indices of motors
 enum {MIN, MAX};                              // indices of ranges
-bool ON[3] = {true, true, false};      // code sent to turn selected motors on
-bool OFF[3] = {false, false, false};    // code sent to turn all motors off
+bool ON[3] = {true, true, true};            // code sent to turn selected motors on
+bool OFF[3] = {false, false, false};          // code sent to turn all motors off
 const uint8_t N_MTR = 3;                      // number of motors
 const uint8_t ADDY = 10;                      // i2c address
 constexpr uint8_t CODES[4] = {0, 245, 0, 255};// i2c codes, needs 'constexpr' modifier to be used in switch case
@@ -33,7 +33,7 @@ CubeMarsAK motors[N_MTR];
 
 ////////////////////////////// Test Parameter Variable Declarations //////////////////////////////
 
-volatile float params[5] = {1.0f, 3.0f, 2.f, 243.f, .5f};   // stores parameters: [Hz, deg, 0-120, Kp, Kd] 
+volatile float params[5] = {1.0f, 3.0f, 3.f, 300.f, .5f};   // stores parameters: [Hz, deg, 0-120, Kp, Kd] 
 uint8_t state = WAIT;                                        // current machine state
 float stroke_rad = 0.0f;                                     // motor input equivalent to user specified deg's of rotation
 uint8_t i_pos = 0;                                           // stores current index used for wave array
@@ -90,11 +90,11 @@ void takeStep(unsigned long t_step, uint8_t i_step)
     motors[i].setPos(p);
     if (motors[i]._powered) 
     {
-      //Serial.print(radToDeg(p));
-      //Serial.print(" ");
-      //Serial.print(radToDeg(motors[i].get(P)));
-      //Serial.print(" ");
-      //Serial.println(motors[i].get(To));
+      /*Serial.print(radToDeg(p));
+      Serial.print(" ");
+      Serial.print(radToDeg(motors[i].get(P)));
+      Serial.print(" ");
+      Serial.println(motors[i].get(To));*/
       //float peak = getPeak(i);
       //if (peak > 0) {Serial.println(peak);}
     }
@@ -115,21 +115,32 @@ void ramp(uint8_t f0, uint8_t f1)
 {
   uint16_t f = f0*10;                             // current frequency [Hz]
   const int8_t dir = copysign(1, f1 - f0);        // direction of ramp (-1:down, +1:up)
-  uint8_t i_step = f0+dir;                        // step size taken through sine wave
+  uint8_t i_step = i_step = calcStep(f);                // step size taken through sine wave
   uint64_t t0 = millis(); uint16_t del_t;         // variables used for timing [ms]   
   f1 *= 10;                          
   while (dir * (f1 - f) > 1)
   {
+    Serial.print(i_step);
+    Serial.print(" ");
+    Serial.println(f);
     del_t = get_del_t(t0);                        // get time since last step
-    t_step = get_t_step(f, STEPS / i_step) + 1;
+    t_step = get_t_step(f, STEPS / i_step);
     takeStep(t_step, i_step);
     if (del_t > t_FSTEP)
     {
       f += dir;
-      i_step = (f > 30) ? 2:1;
+      i_step = calcStep(f);
       t0 += del_t;
     }
   }
+}
+
+uint8_t calcStep(uint8_t f) {
+  uint8_t step = 1;
+  step = (f > 20) ? 2:step;
+  step = (f > 30) ? 3:step;
+  step = (f > 40) ? 4:step;
+  return step;
 }
 
 void center()
@@ -145,7 +156,8 @@ void center()
 
 float getPos(uint8_t i_pos)
 {
-  int16_t p_int = pgm_read_word_near(SINE + i_pos);   // read current value out from table
+  //int16_t p_int = pgm_read_word_near(SINE + i_pos);   // read current value out from table
+  int16_t p_int = SINE[i_pos];
   p_int -= (WAVE_AMP / 2 - 1);                        // zero align position. -u1 for zero indexing
   return p_int * stroke_rad * 2.f / WAVE_AMP;         // convert to motor radians
 }

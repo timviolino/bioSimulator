@@ -17,12 +17,12 @@ const byte MODES[3] = {0xFC, 0xFD, 0xFE};
 CubeMarsAK::CubeMarsAK() {}
 
 void CubeMarsAK::init() {
+  _setMode(MODES[EXIT]);
   if(_powered) 
   {
-    _setMode(MODES[ENTER]);
-    _setMode(MODES[ZERO]);                                       
+    _setMode(MODES[ZERO]);
+    _setMode(MODES[ENTER]);                                 
   }
-  else {_setMode(MODES[EXIT]);}
 }
 
 void CubeMarsAK::setPos(float p) {
@@ -73,8 +73,8 @@ void CubeMarsAK::_unpackReply() {
 void CubeMarsAK::_setMode(byte mode){
  if(mode == MODES[ZERO]) // NOTE: must give all zero command before zeroing
  {
-    for (uint8_t i = 0; i < N_CMDS; i++) {_cmds[i] = 0.0f;}
-    setPos(0.0f);
+    for (uint8_t i = 0; i < N_CMDS; i++) {_cmds[i] = 0.f;}
+    setPos(0.f);
  }
  
  for (uint8_t i = 0; i < BUF_LENGTH; i++) {_buf[i] = 0xFF;}
