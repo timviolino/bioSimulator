@@ -80,7 +80,7 @@ void CubeMarsAK::_setMode(byte mode){
  for (uint8_t i = 0; i < BUF_LENGTH; i++) {_buf[i] = 0xFF;}
  _buf[7] = mode;
  CAN1.sendMsgBuf(_id, 0, BUF_LENGTH, _buf);
- delay(1000);
+ delay(500);
 }
 
 // Conversions between float and unsigned int
