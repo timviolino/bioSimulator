@@ -13,7 +13,7 @@ enum {WAIT, START, RUN_TEST, STOP};           // machine states
 enum {FREQUENCY, STROKE, STEP};               // indices of parameters
 enum {YAW, PITCH, ROLL};                      // indices of motors
 enum {MIN, MAX};                              // indices of ranges
-bool ON[3] = {true, true, true};            // code sent to turn selected motors on
+bool ON[3] = {true, true, true};              // code sent to turn selected motors on
 bool OFF[3] = {false, false, false};          // code sent to turn all motors off
 const uint8_t N_MTR = 3;                      // number of motors
 const uint8_t ADDY = 10;                      // i2c address
